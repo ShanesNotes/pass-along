@@ -43,6 +43,7 @@ export type JudgeResult = {
 };
 
 export type JudgeFn = (golden: GoldenCase) => Promise<JudgeResult> | JudgeResult;
+export type ChangedPathProvider = () => readonly string[];
 
 type GoldenReport = {
   id: string;
@@ -330,11 +331,10 @@ function parseGoldenLine(
   return golden;
 }
 
-export function changedSuites(): SuiteName[] {
-  const changedFiles = [
-    ...gitLines(["diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD"]),
-    ...gitLines(["ls-files", "--others", "--exclude-standard"])
-  ];
+export function changedSuites(
+  changedPathProvider: ChangedPathProvider = gitChangedPaths
+): SuiteName[] {
+  const changedFiles = changedPathProvider();
   const suites = new Set<SuiteName>();
 
   for (const filePath of changedFiles) {
@@ -365,9 +365,16 @@ export function changedSuites(): SuiteName[] {
   return [...suites].sort();
 }
 
+export function gitChangedPaths(): string[] {
+  return [
+    ...gitLines(["diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD"]),
+    ...gitLines(["ls-files", "--others", "--exclude-standard"])
+  ];
+}
+
 function gitLines(args: string[]): string[] {
   try {
-    return linesFromGitOutput(
+    return changedPathLinesFromGitOutput(
       execFileSync("git", args, {
         cwd: repoRoot,
         encoding: "utf8"
@@ -377,14 +384,14 @@ function gitLines(args: string[]): string[] {
     const output = gitOutputFromThrown(error);
 
     if (output !== undefined) {
-      return linesFromGitOutput(output);
+      return changedPathLinesFromGitOutput(output);
     }
 
     return [];
   }
 }
 
-function linesFromGitOutput(output: string): string[] {
+export function changedPathLinesFromGitOutput(output: string): string[] {
   return output
     .split("\n")
     .map((line) => line.trim())

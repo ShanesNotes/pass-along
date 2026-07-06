@@ -12,3 +12,8 @@ coverage/
 .DS_Store
 *.log
 pnpm-debug.log*
+
+# Agent / harness local runtime (claude/codex/grok scratch, not source)
+.claude/
+.codex/
+.agents/

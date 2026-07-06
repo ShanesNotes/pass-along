@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   DEFAULT_JUDGE_NOTICE,
+  changedPathLinesFromGitOutput,
   changedSuites,
   runEval
 } from "./index.js";
@@ -56,9 +57,36 @@ describe("eval runner", () => {
     expect(report.suites[0]?.passed).toBe(26);
   });
 
-  test("detects changed prompt directories from git state", () => {
-    expect(changedSuites()).toEqual(
-      expect.arrayContaining(["crisis", "understand"])
-    );
+  test("maps a changed understand prompt path to the understand suite", () => {
+    expect(
+      changedSuites(() => ["packages/prompts/understand/1.md"])
+    ).toEqual(["understand"]);
+  });
+
+  test("ignores unrelated changed paths", () => {
+    expect(changedSuites(() => ["apps/web/src/app/page.tsx"])).toEqual([]);
+  });
+
+  test("returns sorted unique suites for multiple changed paths", () => {
+    expect(
+      changedSuites(() => [
+        "packages/prompts/understand/1.md",
+        "evals/suites/match/goldens.jsonl",
+        "packages/prompts/crisis_gate/goldens.jsonl",
+        "packages/prompts/understand/goldens.jsonl",
+        "packages/prompts/src/index.ts"
+      ])
+    ).toEqual(["crisis", "match", "understand"]);
+  });
+
+  test("parses git name-only output into changed path lines", () => {
+    expect(
+      changedPathLinesFromGitOutput(
+        "\npackages/prompts/understand/1.md\n\napps/web/src/app/page.tsx\n"
+      )
+    ).toEqual([
+      "packages/prompts/understand/1.md",
+      "apps/web/src/app/page.tsx"
+    ]);
   });
 });
