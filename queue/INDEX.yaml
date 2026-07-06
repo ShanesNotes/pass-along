@@ -26,12 +26,12 @@ waves:
       - id: PA-002
         packet: L0-S2
         title: Monorepo scaffold + CI gates
-        status: queued
+        status: shipped # 0be0ce8 + audit corrections c2bed25
         route: codex
       - id: PA-003
         packet: L0-S3 (code half)
         title: Core contracts + taxonomy + state machine + migrations
-        status: queued
+        status: shipped # fbc5e42 + audit corrections c2bed25 (raw-story RLS isolation)
         route: codex
         depends: [PA-002]
 
@@ -52,7 +52,7 @@ waves:
       - id: PA-006
         packet: wireframes (pre-meeting addition, not in spec)
         title: Clickable direction wireframes in apps/web (find / pass / profile / admin / directions index) on fixture data
-        status: queued
+        status: shipped # 8f44d7e, audited clean
         route: sonnet-agent
         depends: [PA-002]
 
