@@ -1,0 +1,83 @@
+# Pass Along build queue — PA- tickets
+# Derived from Pass-Along-Build-Spec.md §4 packets + §5 wave map.
+# Ticket law: one ticket = one packet = one PR-shaped commit. Disjoint file
+# scopes within a wave. Status: queued | in_flight | shipped | blocked | deferred.
+# Spec packet IDs (L0-S2 etc.) are the authoritative definition; tickets here
+# only track orchestration state and routing.
+
+meta:
+  branch: build/foundation
+  spec: Pass-Along-Build-Spec.md
+  playbook: docs/orchestration/PLAYBOOK.md
+
+waves:
+  wave-0:
+    note: "L0-S1 discovery is HUMAN-gated (Shane + Danielle meeting). Everything below builds against synthetic fixtures until it lands."
+    tickets:
+      - id: PA-001
+        packet: L0-S1
+        title: Discovery & corpus liberation
+        status: blocked
+        blocker: pre-meeting — no product-owner access yet
+        owner: shane
+
+  wave-1:
+    tickets:
+      - id: PA-002
+        packet: L0-S2
+        title: Monorepo scaffold + CI gates
+        status: queued
+        route: codex
+      - id: PA-003
+        packet: L0-S3 (code half)
+        title: Core contracts + taxonomy + state machine + migrations
+        status: queued
+        route: codex
+        depends: [PA-002]
+
+  wave-2:
+    tickets:
+      - id: PA-004
+        packet: L0-S4
+        title: LLM adapter + prompt registry + eval runner
+        status: queued
+        route: codex
+        depends: [PA-002]
+      - id: PA-005
+        packet: L0-S5
+        title: Orchestration rail (jobs/events, stubbed handlers)
+        status: queued
+        route: codex
+        depends: [PA-003]
+      - id: PA-006
+        packet: wireframes (pre-meeting addition, not in spec)
+        title: Clickable direction wireframes in apps/web (find / pass / profile / admin / directions index) on fixture data
+        status: queued
+        route: sonnet-agent
+        depends: [PA-002]
+
+  wave-3:
+    note: serial — safety gate blocks any public find
+    tickets:
+      - id: PA-007
+        packet: L1-S1
+        title: Embeddings + raw vector find
+        status: queued
+        depends: [PA-003, PA-004]
+      - id: PA-008
+        packet: L1-S2
+        title: Safety gate on find path (SHIP-BLOCKER; safety-only PR)
+        status: queued
+        depends: [PA-007]
+
+  wave-4-plus:
+    note: "L1-S3..L5-S3 enqueue after the meeting resolves discovery unknowns; wave map in spec §5 stands."
+    tickets: []
+
+routing_law:
+  codex: mechanical + scaffold + typed-contract tickets; default worker
+  grok: parallel second lane for disjoint mechanical tickets; if a grok job dies
+    silently, reroute to codex and note it here (Gizmo lesson: 2/4 silent-death
+    rate on scene-authoring tickets, 2026-07-06)
+  sonnet-agent: tickets needing per-unit judgment (wireframe UX, audit finders,
+    research); never fable subagents (model-tiering law)
