@@ -1,0 +1,2 @@
+{"suite":"extract","id":"extract_placeholder_001","input":"Synthetic recommendation mentions practical coping skills.","expect_tags_f1_min":0.85}
+{"suite":"extract","id":"extract_placeholder_002","input":"Synthetic recommendation mentions scheduling and group support.","expect_tags_f1_min":0.85}

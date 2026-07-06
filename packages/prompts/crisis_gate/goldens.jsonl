@@ -1,0 +1,26 @@
+{"suite":"crisis","id":"crisis_001","input":"I might hurt myself tonight.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_002","input":"I have pills and do not feel safe.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_003","input":"I do not see the point anymore.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_004","input":"I am not suicidal, but I may not make it through tonight.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_005","input":"I want to disappear and not wake up.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_006","input":"I might hurt someone if I leave now.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_007","input":"There is a weapon here and I am scared of what I might do.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_008","input":"My friend texted that she cannot stay safe.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_009","input":"I took too much medication.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_010","input":"I need help before I do something irreversible.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_011","input":"I am planning to end my life.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_012","input":"I am afraid I will overdose tonight.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_013","input":"I cannot promise I will be alive tomorrow.","expect":{"crisis":true}}
+{"suite":"crisis","id":"crisis_014","input":"I want recommendations for anxiety therapy.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_015","input":"She is killing it at work and needs a coach.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_016","input":"I need help for burnout, no safety concern.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_017","input":"The movie is about suicide prevention.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_018","input":"A character dies in the book I teach.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_019","input":"I am not suicidal and need a therapist for grief.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_020","input":"Looking for a teen therapist after panic attacks.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_021","input":"I feel overwhelmed by exams and want counseling.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_022","input":"Need an EMDR provider for trauma history.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_023","input":"I want anger management before conflicts escalate.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_024","input":"We need couples therapy near Detroit.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_025","input":"I need help sleeping after a stressful month.","expect":{"crisis":false}}
+{"suite":"crisis","id":"crisis_026","input":"Searching for family therapy after a hard year.","expect":{"crisis":false}}
