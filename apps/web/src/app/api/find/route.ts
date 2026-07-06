@@ -13,6 +13,10 @@ import {
   type VectorStorePort
 } from "../../../../../../packages/engine/src/retrieval/index.js";
 import { embedTextDevOnly } from "../../../../../../packages/engine/src/llm/embed.js";
+import {
+  safetyGate as defaultSafetyGate,
+  type SafetyGateResult
+} from "../../../../../../packages/engine/src/safety/index.js";
 import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index.js";
 
 export const runtime = "nodejs";
@@ -46,6 +50,7 @@ export interface FindRouteDeps {
   readonly store: VectorStorePort;
   readonly events: FindEventsPort;
   readonly queries?: QueryAuditPort;
+  readonly safetyGate?: (text: string) => Promise<SafetyGateResult>;
   readonly embed: (text: string) => Promise<{
     readonly vector: readonly number[];
     readonly metadata: EmbeddingMetadata;
@@ -59,22 +64,19 @@ interface FindRequestBody {
   readonly location?: string;
 }
 
-const SAFETY_GATE_ERROR = "UNAVAILABLE_PENDING_SAFETY_GATE";
 const DEFAULT_RETRIEVAL_TOP_N = 40;
 const DEFAULT_CARD_LIMIT = 6;
+const CRISIS_FIND_RESPONSE = {
+  crisis: true,
+  support: {
+    lifeline: "988",
+    message: "Nothing was stored."
+  }
+} as const;
 
 let defaultDepsPromise: Promise<FindRouteDeps> | undefined;
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isSafetyGateDevEscapeEnabled(process.env)) {
-    return json(
-      {
-        error: SAFETY_GATE_ERROR
-      },
-      503
-    );
-  }
-
   const deps = await defaultFindRouteDeps();
   return createFindPostHandler(deps)(request);
 }
@@ -82,15 +84,6 @@ export async function POST(request: Request): Promise<Response> {
 export function createFindPostHandler(deps: FindRouteDeps) {
   return async (request: Request): Promise<Response> => {
     const env = deps.env ?? process.env;
-
-    if (!isSafetyGateDevEscapeEnabled(env)) {
-      return json(
-        {
-          error: SAFETY_GATE_ERROR
-        },
-        503
-      );
-    }
 
     const parsed = parseFindRequestBody(await readJson(request));
 
@@ -100,6 +93,14 @@ export function createFindPostHandler(deps: FindRouteDeps) {
 
     const startedAt = deps.now?.() ?? performance.now();
     const body = parsed.body;
+    const gate = await (deps.safetyGate ?? defaultRouteSafetyGate(env))(
+      body.text
+    );
+
+    if (gate.crisis) {
+      return json(CRISIS_FIND_RESPONSE);
+    }
+
     const queryHash = sha256(body.text);
     const embedding = await deps.embed(body.text);
     const filters = filtersFor(body, deps.corpus);
@@ -162,6 +163,7 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
     corpus,
     store,
     embed,
+    safetyGate: (text) => defaultSafetyGate(text, { env: process.env }),
     events: {
       async emit() {
         return undefined;
@@ -170,11 +172,8 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
   };
 }
 
-function isSafetyGateDevEscapeEnabled(env: NodeJS.ProcessEnv): boolean {
-  return (
-    env.FIND_SAFETY_GATE_DISABLED_I_UNDERSTAND === "1" &&
-    env.NODE_ENV !== "production"
-  );
+function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
+  return (text: string) => defaultSafetyGate(text, { env });
 }
 
 function filtersFor(

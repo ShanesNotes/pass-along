@@ -1,0 +1,40 @@
+{
+  "id": "harm_to_others",
+  "rules": [
+    {
+      "id": "harm_to_others.direct_threat",
+      "pattern": "\\b(?:hurt|harm|attack|stab|shoot) (?:someone|somebody|people|them|him|her|my partner|my child|my family)\\b|\\bkill (?:someone|somebody|people|them|him|her|my partner|my child|the person)\\b",
+      "rationale": "Direct threats toward another person require supportive safety routing before search.",
+      "examples": {
+        "match": [
+          "I might hurt someone if I leave now.",
+          "I am afraid I will harm my partner.",
+          "I might lose control and attack someone.",
+          "I want to kill the person who hurt me."
+        ],
+        "controls": [
+          "I want anger management before conflicts escalate.",
+          "A character kills someone in the book I teach.",
+          "Researching harm reduction resources for a class."
+        ]
+      }
+    },
+    {
+      "id": "harm_to_others.weapon_with_intent",
+      "pattern": "\\b(?:weapon|gun|knife)\\b.{0,80}\\b(?:scared|afraid|might|may|will|intent|plan|what i might do)\\b|\\b(?:scared|afraid)\\b.{0,80}\\bwhat i might do\\b.{0,80}\\b(?:weapon|gun|knife)\\b",
+      "rationale": "Weapon access combined with fear, intent, or loss of control is an immediate safety signal.",
+      "examples": {
+        "match": [
+          "There is a weapon here and I am scared of what I might do.",
+          "I have a knife and might hurt someone.",
+          "A gun is here and I am afraid of what I might do."
+        ],
+        "controls": [
+          "I need therapy for fear after a weapon was found last year.",
+          "My job requires safety training for knives.",
+          "Looking for trauma therapy after gun violence in the news."
+        ]
+      }
+    }
+  ]
+}

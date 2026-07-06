@@ -14,24 +14,31 @@ import {
 } from "./route.js";
 
 describe("POST /api/find", () => {
-  test("returns 503 by default until PA-008 installs the safety gate", async () => {
-    const harness = await createHarness({});
+  test("crisis path returns support response and stores nothing", async () => {
+    const harness = await createHarness({
+      ANTHROPIC_API_KEY: undefined
+    });
     const response = await harness.post({
-      text: "teen anxiety in Denver",
+      text: "I do not see the point anymore.",
       location: "Denver"
     });
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      error: "UNAVAILABLE_PENDING_SAFETY_GATE"
+      crisis: true,
+      support: {
+        lifeline: "988",
+        message: "Nothing was stored."
+      }
     });
     expect(harness.events).toEqual([]);
     expect(harness.queryRows).toEqual([]);
+    expect(harness.embedInputs).toEqual([]);
   });
 
-  test("happy path emits hash-only find event and cards under dev escape hatch", async () => {
+  test("happy path emits hash-only find event and cards", async () => {
     const harness = await createHarness({
-      FIND_SAFETY_GATE_DISABLED_I_UNDERSTAND: "1"
+      ANTHROPIC_API_KEY: undefined
     });
     const text = "Looking for teen anxiety CBT in Denver";
     const response = await harness.post({
@@ -68,6 +75,7 @@ describe("POST /api/find", () => {
         understood: null
       }
     ]);
+    expect(harness.embedInputs).toEqual([text]);
     expect(JSON.stringify(harness.events)).not.toContain(text);
     expect(JSON.stringify(harness.queryRows)).not.toContain(text);
   });
@@ -79,7 +87,7 @@ describe("POST /api/find", () => {
 
     try {
       const harness = await createHarness({
-        FIND_SAFETY_GATE_DISABLED_I_UNDERSTAND: "1"
+        ANTHROPIC_API_KEY: undefined
       });
       await harness.post({
         text: "adult ADHD medication management in Denver",
@@ -100,11 +108,14 @@ describe("POST /api/find", () => {
 
 async function createHarness(env: Record<string, string | undefined>) {
   const corpus = loadFixtureCorpus();
+  const embedInputs: string[] = [];
   const embed = async (text: string) => {
+    embedInputs.push(text);
     const embedding = embedTextDevOnly(text);
     return { vector: embedding.vector, metadata: embedding.metadata };
   };
   const store = await createInMemoryVectorStoreFromCorpus(corpus, embed);
+  embedInputs.length = 0;
   const events: FindPerformedEvent[] = [];
   const queryRows: QueryAuditRow[] = [];
   const eventPort: FindEventsPort = {
@@ -118,7 +129,7 @@ async function createHarness(env: Record<string, string | undefined>) {
     }
   };
   const handler = createFindPostHandler({
-    env: { ...process.env, ...env },
+    env: { ...process.env, ANTHROPIC_API_KEY: undefined, ...env },
     corpus,
     store,
     embed,
@@ -129,6 +140,7 @@ async function createHarness(env: Record<string, string | undefined>) {
 
   return {
     events,
+    embedInputs,
     queryRows,
     async post(body: unknown) {
       return handler(

@@ -1,0 +1,58 @@
+{
+  "id": "medical_emergency",
+  "rules": [
+    {
+      "id": "medical_emergency.overdose_or_poisoning",
+      "pattern": "\\b(?:took|taken|swallowed|ingested) (?:too much|too many|extra|a lot of|all my) (?:medication|medicine|pills|tablets|insulin)\\b|\\b(?:afraid|scared|think|might|may|will|going to|about to) (?:i )?(?:will )?overdose\\b|\\bi overdosed\\b",
+      "rationale": "Possible overdose or poisoning requires crisis/emergency routing instead of search results.",
+      "examples": {
+        "match": [
+          "I took too much medication.",
+          "I swallowed too many pills.",
+          "I am afraid I will overdose tonight.",
+          "I overdosed and feel confused."
+        ],
+        "controls": [
+          "I need medication management for ADHD.",
+          "My client works in overdose prevention education.",
+          "I want trauma therapy after a past overdose in my family."
+        ]
+      }
+    },
+    {
+      "id": "medical_emergency.breathing_or_chest",
+      "pattern": "\\b(?:can't|cannot|can not) breathe\\b|\\bnot breathing\\b|\\bchest pain\\b.{0,80}\\b(?:can't|cannot|can not|short of breath|hard to breathe)\\b",
+      "rationale": "Current breathing trouble or chest-pain emergency language should bypass provider search.",
+      "examples": {
+        "match": [
+          "I can't breathe and have chest pain.",
+          "My child is not breathing.",
+          "Chest pain and short of breath."
+        ],
+        "controls": [
+          "I had chest pain last month and cardiology cleared me.",
+          "Panic attacks used to make breathing feel hard.",
+          "Looking for help with health anxiety."
+        ]
+      }
+    },
+    {
+      "id": "medical_emergency.acute_symptoms",
+      "pattern": "\\b(?:having|am having|think i am having) (?:a )?stroke\\b|\\bstroke symptoms\\b|\\bseizure (?:will not|won't|wont|does not|doesn't) stop\\b|\\bbleeding (?:will not|won't|wont|does not|doesn't) stop\\b|\\bneed an ambulance\\b|\\bmedical emergency (?:now|right now|today)\\b",
+      "rationale": "Acute emergency symptoms should route to immediate support resources.",
+      "examples": {
+        "match": [
+          "I think I am having a stroke.",
+          "The bleeding will not stop.",
+          "The seizure will not stop.",
+          "I need an ambulance now."
+        ],
+        "controls": [
+          "Looking for support after a family medical emergency last year.",
+          "I teach stroke prevention at a clinic.",
+          "Need therapy for anxiety after a seizure history."
+        ]
+      }
+    }
+  ]
+}

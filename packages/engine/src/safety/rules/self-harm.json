@@ -1,0 +1,59 @@
+{
+  "id": "self_harm",
+  "rules": [
+    {
+      "id": "self_harm.direct_intent",
+      "pattern": "\\b(?:hurt|harm|kill) myself\\b|\\bend (?:my|their|his|her) life\\b|\\b(?:i am|i'm|im|feel|feeling) suicidal\\b|\\bsuicidal,? but\\b",
+      "rationale": "Direct self-harm or suicide wording should route to crisis support before search.",
+      "examples": {
+        "match": [
+          "I might hurt myself tonight.",
+          "I am planning to end my life.",
+          "I feel suicidal and alone.",
+          "I'm not suicidal, but I don't trust myself tonight."
+        ],
+        "controls": [
+          "I am not suicidal and need a therapist for grief.",
+          "The movie is about suicide prevention.",
+          "I teach a unit on self-harm prevention."
+        ]
+      }
+    },
+    {
+      "id": "self_harm.cannot_stay_safe",
+      "pattern": "\\b(?:do not|don't|dont|cannot|can't|can not) (?:feel|stay|keep myself|keep me) safe\\b|\\bnot safe with myself\\b|\\bdo not trust myself tonight\\b|\\bdon't trust myself tonight\\b",
+      "rationale": "Inability to stay safe is an active safety signal even without explicit method language.",
+      "examples": {
+        "match": [
+          "I have pills and do not feel safe.",
+          "I cannot stay safe tonight.",
+          "I can't keep myself safe.",
+          "I do not feel safe with myself."
+        ],
+        "controls": [
+          "I am safe tonight and looking for depression therapy.",
+          "Need help for burnout, no safety concern.",
+          "Looking for a safe therapist office near Denver."
+        ]
+      }
+    },
+    {
+      "id": "self_harm.indirect_hopelessness",
+      "pattern": "\\b(?:do not|don't|dont) see (?:the )?point (?:anymore|of (?:living|being alive|going on))\\b|\\b(?:everyone|everybody|my family|the world|people) (?:would|will|'d) be better off without me\\b|\\bit would be better if i (?:was|were) gone\\b|\\b(?:do not|don't|dont) want to (?:be alive|wake up)\\b|\\bwant to disappear(?: and not wake up)?\\b|\\bnot make it through tonight\\b|\\balive tomorrow\\b|\\bdo something irreversible\\b|\\bthinking about ending (?:my|their|his|her) life\\b",
+      "rationale": "Indirect hopelessness and goodbye-style phrasing can indicate active self-harm risk.",
+      "examples": {
+        "match": [
+          "I do not see the point anymore.",
+          "Everyone would be better off without me.",
+          "I want to disappear and not wake up.",
+          "I cannot promise I will be alive tomorrow."
+        ],
+        "controls": [
+          "This deadline is killing me.",
+          "My plants are dying.",
+          "Last year I had thoughts about not waking up, but not now."
+        ]
+      }
+    }
+  ]
+}
