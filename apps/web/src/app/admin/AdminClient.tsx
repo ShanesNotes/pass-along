@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   flaggedSubmissions,
@@ -21,6 +22,9 @@ export function AdminClient() {
       <h1>Moderation queue</h1>
       <p style={{ color: "#9a5a3f", fontWeight: 700, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         internal — not public
+      </p>
+      <p style={{ margin: "6px 0 20px" }}>
+        <Link href="/admin/metrics">View founder metrics dashboard →</Link>
       </p>
 
       <section style={{ marginTop: "1.5rem" }}>

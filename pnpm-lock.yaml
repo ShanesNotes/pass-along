@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@pass-along/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       next:
         specifier: ^15.0.0
         version: 15.5.20(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
