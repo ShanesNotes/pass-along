@@ -2,21 +2,88 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve, sep } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const tempRoots: string[] = [];
+const scannerIgnoreDirectories = new Set([
+  ".git",
+  ".next",
+  "coverage",
+  "dist",
+  "node_modules"
+]);
+const scannerExtensions = new Set([
+  ".cjs",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".sql",
+  ".ts",
+  ".tsx"
+]);
 
 function makeTempRoot(name: string) {
   const root = mkdtempSync(join(tmpdir(), `pass-along-${name}-`));
   tempRoots.push(root);
   return root;
+}
+
+function findLargestScannedFile(root: string): string {
+  let largestFile = "";
+  let largestSize = -1;
+
+  for (const filePath of listScannedFiles(root)) {
+    const size = statSync(filePath).size;
+
+    if (size > largestSize) {
+      largestFile = filePath;
+      largestSize = size;
+    }
+  }
+
+  if (!largestFile) {
+    throw new Error("no scanned files found");
+  }
+
+  return largestFile;
+}
+
+function listScannedFiles(root: string): string[] {
+  const stats = statSync(root);
+
+  if (stats.isFile()) {
+    return scannerExtensions.has(extname(root)) ? [root] : [];
+  }
+
+  if (!stats.isDirectory()) {
+    return [];
+  }
+
+  if (scannerIgnoreDirectories.has(basename(root))) {
+    return [];
+  }
+
+  if (normalizePath(root).endsWith("/scripts/__fixtures__")) {
+    return [];
+  }
+
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) =>
+    listScannedFiles(join(root, entry.name))
+  );
+}
+
+function normalizePath(filePath: string): string {
+  return filePath.split(sep).join("/");
 }
 
 type ScriptResult = {
@@ -124,6 +191,63 @@ describe("privacy scan", () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toContain("analytics");
+  });
+
+  test("flags multi-line raw query logging", async () => {
+    const root = makeTempRoot("privacy-multiline-log");
+    const targetPath = join(root, "x.ts");
+    const logCall = ["  console.", "log("].join("");
+    writeFileSync(
+      targetPath,
+      [
+        "export function h(rawQuery: string) {",
+        logCall,
+        '    "q",',
+        "    rawQuery",
+        "  );",
+        "}"
+      ].join("\n")
+    );
+
+    const result = await runScript(scannerPath, [targetPath]);
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain("raw query");
+  });
+
+  test("flags multi-line raw text inserts into queries", async () => {
+    const root = makeTempRoot("privacy-multiline-insert");
+    const targetPath = join(root, "x.sql");
+    const tableName = ["quer", "ies"].join("");
+    const rawTextColumn = ["raw", "_text"].join("");
+    writeFileSync(
+      targetPath,
+      [
+        `insert into ${tableName} (`,
+        "  query_hash,",
+        "  understood,",
+        `  ${rawTextColumn}`,
+        ") values (",
+        "  'hash',",
+        "  '{}'::jsonb,",
+        "  'raw'",
+        ");"
+      ].join("\n")
+    );
+
+    const result = await runScript(scannerPath, [targetPath]);
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain("queries rows");
+  });
+
+  test("scans the largest repository file without regex blowups", async () => {
+    const largestFile = findLargestScannedFile(repoRoot);
+    const start = performance.now();
+    const result = await runScript(scannerPath, [largestFile]);
+
+    expect(result.status).toBe(0);
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 

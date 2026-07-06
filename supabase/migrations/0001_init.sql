@@ -42,7 +42,6 @@ create table if not exists public.recommendations (
         'removed'
       )
     ),
-  original_story text not null,
   scrubbed_story text,
   recommender_contact_hash text,
   submitted_at timestamptz not null default now(),
@@ -57,6 +56,11 @@ create index if not exists recommendations_provider_id_idx
 
 create index if not exists recommendations_status_idx
   on public.recommendations (status);
+
+create table if not exists public.recommendation_originals (
+  recommendation_id uuid primary key references public.recommendations (id),
+  original_story text not null
+);
 
 create table if not exists public.rec_tags (
   id uuid primary key default gen_random_uuid(),
@@ -169,6 +173,7 @@ create table if not exists public.queries (
 
 alter table public.providers enable row level security;
 alter table public.recommendations enable row level security;
+alter table public.recommendation_originals enable row level security;
 alter table public.rec_tags enable row level security;
 alter table public.rec_embeddings enable row level security;
 alter table public.moderation_events enable row level security;

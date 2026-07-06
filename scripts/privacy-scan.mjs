@@ -30,7 +30,7 @@ const rules = [
       return collectLineMatches(
         filePath,
         text,
-        /\bconsole\s*\.\s*log\s*\([^)\n]*(?:raw\s*query|rawQuery|queryText|query)\b[^)\n]*\)/giu
+        /\bconsole\s*\.\s*log\s*\([\s\S]{0,500}?\b(?:raw\s*query|rawQuery|queryText|query)\b[\s\S]{0,500}?\)/giu
       );
     }
   },
@@ -58,12 +58,12 @@ const rules = [
         ...collectLineMatches(
           filePath,
           text,
-          /\binsert\s+into\s+queries\s*\([^)]*(?:raw_text|rawText|query_text|queryText|query)\b/giu
+          /\binsert\s+into\s+queries\s*\([\s\S]{0,1000}?\b(?:raw_text|rawText|query_text|queryText|query)\b/giu
         ),
         ...collectLineMatches(
           filePath,
           text,
-          /\bfrom\s*\(\s*["'`]queries["'`]\s*\)\s*\.\s*insert\s*\([^)]*(?:raw_text|rawText|query_text|queryText|query)\b/giu
+          /\bfrom\s*\(\s*["'`]queries["'`]\s*\)\s*\.\s*insert\s*\([\s\S]{0,1000}?\b(?:raw_text|rawText|query_text|queryText|query)\b/giu
         )
       ];
 
@@ -137,16 +137,30 @@ function shouldScanFile(filePath) {
 
 function collectLineMatches(filePath, text, pattern) {
   const matches = [];
-  const lines = text.split(/\r?\n/);
+  pattern.lastIndex = 0;
 
-  for (const [index, line] of lines.entries()) {
-    pattern.lastIndex = 0;
-    if (pattern.test(line)) {
-      matches.push({ filePath, line: index + 1, source: line });
-    }
+  for (const match of text.matchAll(pattern)) {
+    const source = match[0] ?? "";
+    matches.push({
+      filePath,
+      line: lineNumberAt(text, match.index ?? 0),
+      source: source.replace(/\s+/gu, " ").slice(0, 200)
+    });
   }
 
   return matches;
+}
+
+function lineNumberAt(text, index) {
+  let line = 1;
+
+  for (let cursor = 0; cursor < index; cursor += 1) {
+    if (text[cursor] === "\n") {
+      line += 1;
+    }
+  }
+
+  return line;
 }
 
 function normalizePath(filePath) {

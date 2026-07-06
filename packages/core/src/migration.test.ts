@@ -17,6 +17,24 @@ describe("initial migration privacy contract", () => {
     expect(queriesColumns).not.toContain("raw_query");
     expect(queriesColumns).not.toContain("query_text");
   });
+
+  test("raw recommendation stories are isolated from anon-readable recommendations", () => {
+    const sql = readFileSync(
+      resolve(repoRoot, "supabase/migrations/0001_init.sql"),
+      "utf8"
+    );
+    const recommendationColumns = extractCreateTableColumns(sql, "recommendations");
+
+    expect(
+      recommendationColumns.filter((column) => /original|raw/iu.test(column))
+    ).toEqual([]);
+
+    expect(extractCreateTableColumns(sql, "recommendation_originals")).toEqual(
+      expect.arrayContaining(["recommendation_id", "original_story"])
+    );
+    expect(hasRowLevelSecurityEnabled(sql, "recommendation_originals")).toBe(true);
+    expect(extractAnonPolicies(sql, "recommendation_originals")).toEqual([]);
+  });
 });
 
 function extractCreateTableColumns(sql: string, tableName: string): string[] {
@@ -103,4 +121,31 @@ function stripSqlComments(text: string): string {
       "\n".repeat(match.split(/\r?\n/).length - 1)
     )
     .replace(/--.*$/gmu, "");
+}
+
+function hasRowLevelSecurityEnabled(sql: string, tableName: string): boolean {
+  const searchable = stripSqlComments(sql);
+  return new RegExp(
+    `alter\\s+table\\s+(?:public\\.)?${tableName}\\s+enable\\s+row\\s+level\\s+security\\s*;`,
+    "iu"
+  ).test(searchable);
+}
+
+function extractAnonPolicies(sql: string, tableName: string): string[] {
+  const searchable = stripSqlComments(sql);
+  const policies: string[] = [];
+
+  for (const match of searchable.matchAll(/\bcreate\s+policy\b[\s\S]*?;/giu)) {
+    const statement = match[0];
+    const isTablePolicy = new RegExp(
+      `\\bon\\s+(?:public\\.)?${tableName}\\b`,
+      "iu"
+    ).test(statement);
+
+    if (isTablePolicy && /\bto\s+anon\b/iu.test(statement)) {
+      policies.push(statement);
+    }
+  }
+
+  return policies;
 }
