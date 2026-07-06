@@ -133,7 +133,8 @@ describe("EventCatalogSchema", () => {
           query_hash_sha256:
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           result_count: 4,
-          latency_ms: 182
+          latency_ms: 182,
+          degraded: true
         }
       },
       { type: "find.unmet", payload: { understood_json: understoodQuery } },

@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   DEFAULT_JUDGE_NOTICE,
   changedPathLinesFromGitOutput,
   changedSuites,
-  runEval
+  gitChangedPaths,
+  runEval,
+  selectEvalSuites
 } from "./index.js";
 
 describe("eval runner", () => {
@@ -15,8 +18,8 @@ describe("eval runner", () => {
     expect(report.suites[0]).toMatchObject({
       suite: "crisis",
       status: "PASSED",
-      total: 70,
-      passed: 70,
+      total: 74,
+      passed: 74,
       failed: 0,
       metric: "recall",
       metric_value: 1,
@@ -27,6 +30,29 @@ describe("eval runner", () => {
       false_positive_threshold: 0.15,
       false_positive_threshold_met: true
     });
+  });
+
+  test("selects all suites by default even when a clean checkout has no changed paths", async () => {
+    const plan = selectEvalSuites([], () => []);
+    const report = await runEval(plan.suites, plan.mode);
+    const crisis = report.suites.find((suite) => suite.suite === "crisis");
+
+    expect(plan).toEqual({
+      mode: "all",
+      suites: ["crisis", "understand", "extract", "match"]
+    });
+    expect(crisis?.total).toBeGreaterThanOrEqual(70);
+    expect(crisis?.metric_value).toBe(1);
+  });
+
+  test("CI runs every eval suite instead of changed-only evals", () => {
+    const ci = readFileSync(
+      new URL("../../.github/workflows/ci.yml", import.meta.url),
+      "utf8"
+    );
+
+    expect(ci).toContain("run: pnpm eval\n");
+    expect(ci).not.toContain("run: pnpm eval --changed");
   });
 
   test("fails the crisis suite when recall drops below 1.0", async () => {
@@ -135,7 +161,7 @@ describe("eval runner", () => {
       passed: true
     }));
 
-    expect(report.suites[0]?.passed).toBe(70);
+    expect(report.suites[0]?.passed).toBe(74);
   });
 
   test("maps a changed understand prompt path to the understand suite", () => {
@@ -169,6 +195,35 @@ describe("eval runner", () => {
     ).toEqual([
       "packages/prompts/understand/1.md",
       "apps/web/src/app/page.tsx"
+    ]);
+  });
+
+  test("uses a GitHub base ref merge-base for changed paths when available", () => {
+    const calls: string[][] = [];
+    const changed = gitChangedPaths({
+      env: { GITHUB_BASE_REF: "main" },
+      git(args) {
+        calls.push([...args]);
+
+        if (args[0] === "merge-base") {
+          return "abc123\n";
+        }
+
+        if (args[0] === "diff") {
+          return "evals/suites/crisis/goldens.jsonl\n";
+        }
+
+        return "";
+      }
+    });
+
+    expect(changed).toEqual(["evals/suites/crisis/goldens.jsonl"]);
+    expect(calls).toContainEqual(["merge-base", "HEAD", "origin/main"]);
+    expect(calls).toContainEqual([
+      "diff",
+      "--name-only",
+      "--diff-filter=ACMRTUXB",
+      "abc123...HEAD"
     ]);
   });
 });

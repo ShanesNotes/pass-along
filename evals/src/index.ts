@@ -49,6 +49,12 @@ export type JudgeResult = {
 
 export type JudgeFn = (golden: GoldenCase) => Promise<JudgeResult> | JudgeResult;
 export type ChangedPathProvider = () => readonly string[];
+export type GitExec = (args: readonly string[]) => string;
+
+export interface GitChangedPathsOptions {
+  readonly env?: NodeJS.ProcessEnv;
+  readonly git?: GitExec;
+}
 
 type GoldenReport = {
   id: string;
@@ -429,21 +435,58 @@ export function changedSuites(
   return [...suites].sort();
 }
 
-export function gitChangedPaths(): string[] {
-  return [
-    ...gitLines(["diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD"]),
-    ...gitLines(["ls-files", "--others", "--exclude-standard"])
-  ];
+export function gitChangedPaths(
+  options: GitChangedPathsOptions = {}
+): string[] {
+  const env = options.env ?? process.env;
+  const git = options.git ?? execGit;
+  const baseRef = env.GITHUB_BASE_REF?.trim();
+  const baseDiffArgs = baseRef
+    ? baseRefDiffArgs(baseRef, git)
+    : undefined;
+
+  return uniquePaths([
+    ...gitLines(
+      baseDiffArgs ?? ["diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD"],
+      git
+    ),
+    ...gitLines(["ls-files", "--others", "--exclude-standard"], git)
+  ]);
 }
 
-function gitLines(args: string[]): string[] {
+function baseRefDiffArgs(
+  baseRef: string,
+  git: GitExec
+): readonly string[] | undefined {
+  const mergeBase = gitLines([
+    "merge-base",
+    "HEAD",
+    remoteBaseRef(baseRef)
+  ], git)[0];
+
+  return mergeBase === undefined
+    ? undefined
+    : ["diff", "--name-only", "--diff-filter=ACMRTUXB", `${mergeBase}...HEAD`];
+}
+
+function remoteBaseRef(baseRef: string): string {
+  return baseRef.startsWith("origin/") ? baseRef : `origin/${baseRef}`;
+}
+
+function uniquePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths)];
+}
+
+function execGit(args: readonly string[]): string {
+  return execFileSync("git", [...args], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+}
+
+function gitLines(args: readonly string[], git: GitExec = execGit): string[] {
   try {
-    return changedPathLinesFromGitOutput(
-      execFileSync("git", args, {
-        cwd: repoRoot,
-        encoding: "utf8"
-      })
-    );
+    return changedPathLinesFromGitOutput(git(args));
   } catch (error) {
     const output = gitOutputFromThrown(error);
 
@@ -1001,7 +1044,10 @@ function printSummary(report: EvalReport, reportPath: string): void {
   console.log(`report: ${reportPath}`);
 }
 
-function parseCliArgs(args: readonly string[]): {
+export function selectEvalSuites(
+  args: readonly string[],
+  changedPathProvider: ChangedPathProvider = gitChangedPaths
+): {
   mode: EvalReport["mode"];
   suites: SuiteName[];
 } {
@@ -1023,7 +1069,7 @@ function parseCliArgs(args: readonly string[]): {
   if (args.includes("--changed")) {
     return {
       mode: "changed",
-      suites: changedSuites()
+      suites: changedSuites(changedPathProvider)
     };
   }
 
@@ -1034,7 +1080,7 @@ function parseCliArgs(args: readonly string[]): {
 }
 
 export async function main(args: readonly string[]): Promise<EvalReport> {
-  const parsed = parseCliArgs(args);
+  const parsed = selectEvalSuites(args);
   const report = await runEval(parsed.suites, parsed.mode);
   const reportPath = writeReport(report);
   printSummary(report, reportPath);
@@ -1069,8 +1115,10 @@ function normalizeText(value: string): string {
 
 function normalizeEvalSafetyText(value: string): string {
   return value
-    .toLowerCase()
+    .normalize("NFKC")
     .replaceAll(/[’‘]/gu, "'")
+    .replaceAll(/\p{Cf}+/gu, " ")
+    .toLocaleLowerCase("en-US")
     .replaceAll(/\s+/gu, " ")
     .trim();
 }

@@ -58,8 +58,10 @@ export function matchSafetyRules(
 
 export function normalizeSafetyText(input: string): string {
   return input
-    .toLowerCase()
+    .normalize("NFKC")
     .replaceAll(/[’‘]/gu, "'")
+    .replaceAll(/\p{Cf}+/gu, " ")
+    .toLocaleLowerCase("en-US")
     .replaceAll(/\s+/gu, " ")
     .trim();
 }

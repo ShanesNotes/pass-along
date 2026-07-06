@@ -18,18 +18,17 @@ import {
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index.js";
 import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index.js";
+import type {
+  EventCatalog,
+  UnderstoodQuery
+} from "../../../../../../packages/core/src/index.js";
 
 export const runtime = "nodejs";
 
-export interface FindPerformedEvent {
-  readonly type: "find.performed";
-  readonly payload: {
-    readonly understood: null;
-    readonly query_hash: string;
-    readonly result_count: number;
-    readonly latency_ms: number;
-  };
-}
+export type FindPerformedEvent = Extract<
+  EventCatalog,
+  { type: "find.performed" }
+>;
 
 export interface FindEventsPort {
   emit(event: FindPerformedEvent): Promise<void>;
@@ -101,9 +100,12 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       return json(CRISIS_FIND_RESPONSE);
     }
 
+    warnIfSafetyGateDegraded(gate);
+
     const queryHash = sha256(body.text);
     const embedding = await deps.embed(body.text);
     const filters = filtersFor(body, deps.corpus);
+    const understoodJson = understoodForEvent(body, filters.tags ?? []);
     const matches = await deps.store.search({
       vector: embedding.vector,
       topN: DEFAULT_RETRIEVAL_TOP_N,
@@ -122,10 +124,11 @@ export function createFindPostHandler(deps: FindRouteDeps) {
     await deps.events.emit({
       type: "find.performed",
       payload: {
-        understood: null,
-        query_hash: queryHash,
+        understood_json: understoodJson,
+        query_hash_sha256: queryHash,
         result_count: cards.length,
-        latency_ms: latencyMs
+        latency_ms: latencyMs,
+        ...(gate.degraded ? { degraded: true } : {})
       }
     });
 
@@ -176,6 +179,16 @@ function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
   return (text: string) => defaultSafetyGate(text, { env });
 }
 
+function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
+  if (!gate.degraded) {
+    return;
+  }
+
+  console.warn("find.safety_gate_degraded", {
+    reason: gate.tier2.reason
+  });
+}
+
 function filtersFor(
   body: FindRequestBody,
   corpus: RetrievalCorpus
@@ -200,6 +213,30 @@ function filtersFor(
   }
 
   return filters;
+}
+
+function understoodForEvent(
+  body: FindRequestBody,
+  tags: readonly string[]
+): UnderstoodQuery {
+  const understood: UnderstoodQuery = {
+    issues: tags.map((tag) => ({
+      value: tag,
+      vocab: true,
+      confidence: 0.7
+    })),
+    kind: body.kind ?? "either",
+    preferences: {},
+    confidence: tags.length > 0 || body.location !== undefined ? 0.6 : 0.3
+  };
+
+  if (body.location !== undefined && body.location.trim().length > 0) {
+    understood.location = {
+      text: body.location.trim()
+    };
+  }
+
+  return understood;
 }
 
 async function readJson(request: Request): Promise<unknown> {

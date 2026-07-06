@@ -3,6 +3,7 @@ import {
   complete,
   LlmTimeoutError,
   MissingKeyError,
+  ProviderHttpError,
   type Transport
 } from "./adapter.js";
 import { PROMPT_ROUTING } from "./routing.js";
@@ -106,6 +107,40 @@ describe("complete", () => {
     expect(result.text).toBe("done");
     expect(transport).toHaveBeenCalledTimes(3);
     expect(sleepCalls).toEqual([10, 20]);
+  });
+
+  test("redacts and bounds provider HTTP error response text", async () => {
+    const rawNeedle = "raw user request echoed by provider";
+    const longBody = `${rawNeedle} ${"x".repeat(900)}`;
+
+    await expect(
+      complete("understand@1", "retry", {
+        env: { OPENAI_API_KEY: "test-openai-key" },
+        transport: async () => new Response(longBody, { status: 400 }),
+        maxRetries: 0
+      })
+    ).rejects.toMatchObject({
+      name: "ProviderHttpError",
+      provider: "openai",
+      status: 400,
+      responseText: expect.stringContaining("[redacted_provider_response]")
+    } satisfies Partial<ProviderHttpError>);
+
+    try {
+      await complete("understand@1", "retry", {
+        env: { OPENAI_API_KEY: "test-openai-key" },
+        transport: async () => new Response(longBody, { status: 400 }),
+        maxRetries: 0
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProviderHttpError);
+      const providerError = error as ProviderHttpError;
+      expect(providerError.responseText.length).toBeLessThanOrEqual(500);
+      expect(providerError.responseText).not.toContain(rawNeedle);
+      return;
+    }
+
+    throw new Error("Expected ProviderHttpError");
   });
 
   test("aborts the transport and throws a timeout error", async () => {

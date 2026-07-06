@@ -62,6 +62,8 @@ type ProviderRequest = {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_BACKOFF_BASE_MS = 250;
+const PROVIDER_RESPONSE_TEXT_LIMIT = 500;
+const PROVIDER_RESPONSE_REDACTION_MARKER = "[redacted_provider_response]";
 
 export async function complete(
   promptId: string,
@@ -577,8 +579,25 @@ export class ProviderHttpError extends Error {
     this.name = "ProviderHttpError";
     this.provider = provider;
     this.status = status;
-    this.responseText = responseText;
+    // Provider 4xx bodies can echo prompts or user text; keep diagnostics bounded
+    // and marked without retaining the raw response body.
+    this.responseText = redactProviderResponseText(responseText);
   }
+}
+
+function redactProviderResponseText(responseText: string): string {
+  const truncatedLength = Math.min(
+    responseText.length,
+    PROVIDER_RESPONSE_TEXT_LIMIT
+  );
+  const truncated = responseText.length > PROVIDER_RESPONSE_TEXT_LIMIT
+    ? "; truncated=true"
+    : "; truncated=false";
+
+  return (
+    `${PROVIDER_RESPONSE_REDACTION_MARKER}; ` +
+    `chars=${truncatedLength}/${responseText.length}${truncated}`
+  );
 }
 
 export class LlmTimeoutError extends Error {

@@ -32,7 +32,7 @@ jobs:
         run: pnpm test
 
       - name: Eval
-        run: pnpm eval --changed
+        run: pnpm eval
 
       - name: DB lint
         run: pnpm db:lint

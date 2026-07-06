@@ -186,7 +186,8 @@ export const FindPerformedEventSchema = z
         understood_json: UnderstoodQuerySchema,
         query_hash_sha256: Sha256Schema,
         result_count: z.number().int().nonnegative(),
-        latency_ms: z.number().int().nonnegative()
+        latency_ms: z.number().int().nonnegative(),
+        degraded: z.boolean().optional()
       })
       .strict()
   })

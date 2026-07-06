@@ -4,6 +4,8 @@ import {
   loadFixtureCorpus
 } from "../../../../../../packages/engine/src/retrieval/index.js";
 import { embedTextDevOnly } from "../../../../../../packages/engine/src/llm/embed.js";
+import type { SafetyGateResult } from "../../../../../../packages/engine/src/safety/index.js";
+import { EventCatalogSchema } from "../../../../../../packages/core/src/index.js";
 import {
   createFindPostHandler,
   sha256,
@@ -37,9 +39,14 @@ describe("POST /api/find", () => {
   });
 
   test("happy path emits hash-only find event and cards", async () => {
-    const harness = await createHarness({
-      ANTHROPIC_API_KEY: undefined
-    });
+    const harness = await createHarness(
+      {
+        ANTHROPIC_API_KEY: undefined
+      },
+      {
+        safetyGate: nonDegradedSafetyGate
+      }
+    );
     const text = "Looking for teen anxiety CBT in Denver";
     const response = await harness.post({
       text,
@@ -58,17 +65,22 @@ describe("POST /api/find", () => {
       why: null
     });
 
-    expect(harness.events).toEqual([
-      {
-        type: "find.performed",
-        payload: {
-          understood: null,
-          query_hash: sha256(text),
-          result_count: body.results.length,
-          latency_ms: 15
+    expect(harness.events).toHaveLength(1);
+    const parsedEvent = EventCatalogSchema.parse(harness.events[0]);
+    expect(parsedEvent).toMatchObject({
+      type: "find.performed",
+      payload: {
+        query_hash_sha256: sha256(text),
+        result_count: body.results.length,
+        latency_ms: 15,
+        understood_json: {
+          kind: "therapist",
+          location: {
+            text: "Denver"
+          }
         }
       }
-    ]);
+    });
     expect(harness.queryRows).toEqual([
       {
         query_hash: sha256(text),
@@ -86,9 +98,14 @@ describe("POST /api/find", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
-      const harness = await createHarness({
-        ANTHROPIC_API_KEY: undefined
-      });
+      const harness = await createHarness(
+        {
+          ANTHROPIC_API_KEY: undefined
+        },
+        {
+          safetyGate: nonDegradedSafetyGate
+        }
+      );
       await harness.post({
         text: "adult ADHD medication management in Denver",
         kind: "therapist",
@@ -104,9 +121,65 @@ describe("POST /api/find", () => {
       error.mockRestore();
     }
   });
+
+  test("warns and annotates the find event when the safety gate is degraded", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const text = "Looking for teen anxiety CBT in Denver";
+
+    try {
+      const harness = await createHarness(
+        {
+          ANTHROPIC_API_KEY: undefined
+        },
+        {
+          safetyGate: async () => ({
+            crisis: false,
+            degraded: true,
+            tier1: {
+              triggered: false,
+              matches: []
+            },
+            tier2: {
+              status: "skipped",
+              promptId: "crisis_gate@1",
+              crisis: false,
+              reason: "missing_api_key",
+              missingEnvVar: "ANTHROPIC_API_KEY"
+            }
+          })
+        }
+      );
+      await harness.post({
+        text,
+        kind: "therapist",
+        location: "Denver"
+      });
+
+      expect(warn).toHaveBeenCalledWith("find.safety_gate_degraded", {
+        reason: "missing_api_key"
+      });
+      const parsedEvent = EventCatalogSchema.parse(harness.events[0]);
+      expect(parsedEvent).toMatchObject({
+        type: "find.performed",
+        payload: {
+          degraded: true
+        }
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(text);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
-async function createHarness(env: Record<string, string | undefined>) {
+async function createHarness(
+  env: Record<string, string | undefined>,
+  options: {
+    readonly safetyGate?: (
+      text: string
+    ) => Promise<SafetyGateResult>;
+  } = {}
+) {
   const corpus = loadFixtureCorpus();
   const embedInputs: string[] = [];
   const embed = async (text: string) => {
@@ -135,6 +208,7 @@ async function createHarness(env: Record<string, string | undefined>) {
     embed,
     events: eventPort,
     queries: queryPort,
+    ...(options.safetyGate ? { safetyGate: options.safetyGate } : {}),
     now: clock([100, 115])
   });
 
@@ -160,5 +234,24 @@ function clock(values: readonly number[]) {
     const value = values[index] ?? values[values.length - 1] ?? 0;
     index += 1;
     return value;
+  };
+}
+
+async function nonDegradedSafetyGate(): Promise<SafetyGateResult> {
+  return {
+    crisis: false,
+    degraded: false,
+    tier1: {
+      triggered: false,
+      matches: []
+    },
+    tier2: {
+      status: "completed",
+      promptId: "crisis_gate@1",
+      crisis: false,
+      reason: "no safety signal",
+      provider: "anthropic",
+      model: "test-model"
+    }
   };
 }
