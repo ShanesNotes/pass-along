@@ -5,6 +5,7 @@ import {
   cardsFromMatches,
   corpusTags,
   createInMemoryVectorStoreFromCorpus,
+  findMatches,
   inferTagFiltersFromText,
   type FindResultCard,
   type ProviderKind,
@@ -99,10 +100,11 @@ export function createFindPostHandler(deps: FindRouteDeps) {
     const embedding = await deps.embed(body.text);
     const filters = filtersFor(body, deps.corpus);
     const understoodJson = understoodForEvent(body, filters.tags ?? []);
-    const matches = await deps.store.search({
+    const { matches, unmet } = await findMatches({
+      store: deps.store,
       vector: embedding.vector,
-      topN: DEFAULT_RETRIEVAL_TOP_N,
-      filters
+      filters,
+      topN: DEFAULT_RETRIEVAL_TOP_N
     });
     const cards = cardsFromMatches(matches, deps.corpus, DEFAULT_CARD_LIMIT);
     const latencyMs = Math.max(
@@ -127,9 +129,11 @@ export function createFindPostHandler(deps: FindRouteDeps) {
 
     return json({
       understood: null,
+      unmet,
       results: cards
     } satisfies {
       understood: null;
+      unmet: boolean;
       results: readonly FindResultCard[];
     });
   };

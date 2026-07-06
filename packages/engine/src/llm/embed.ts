@@ -148,14 +148,26 @@ function providerHeaders(
   };
 }
 
+// DEV-ONLY: hash embedder is a token-overlap stand-in for a real model, so it
+// needs light normalization (possessives, stopwords) or natural sentences
+// dilute below any useful cosine signal. Never used for the real embedding path.
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "of", "to", "for", "with", "in", "on", "at",
+  "my", "our", "your", "we", "i", "you", "he", "she", "they", "it",
+  "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did",
+  "someone", "something", "anyone", "help", "looking", "look", "need", "want"
+]);
+
 function tokenize(text: string): readonly string[] {
   return text
     .toLowerCase()
     .replace(/lgbtq\+/gu, "lgbtq")
+    .replace(/['’]s\b/gu, "")
     .replace(/[^a-z0-9]+/gu, " ")
     .trim()
     .split(/\s+/u)
-    .filter((token) => token.length > 1);
+    .filter((token) => token.length > 1 && !STOPWORDS.has(token));
 }
 
 function ngrams(tokens: readonly string[], size: number): readonly string[] {

@@ -65,6 +65,7 @@ describe("find page", () => {
     ];
     const { fetcher } = mockFindFetch({
       understood: null,
+      unmet: false,
       results: cards
     });
 
@@ -92,6 +93,7 @@ describe("find page", () => {
     const query = "Looking for chronic pain support near Detroit";
     const { fetcher } = mockFindFetch({
       understood: null,
+      unmet: true,
       results: [
         findCard({
           id: "provider_pain_detroit",
@@ -111,6 +113,9 @@ describe("find page", () => {
       })
     });
 
+    // Route-contract confirmation for L1-S5: an unmet:true response still
+    // carries real cards, and the page renders the sparse framing above them
+    // rather than an empty list.
     expect(html).toContain("We don’t have many recommendations");
     expect(html).toContain("Ask the network instead");
     expect(html).toContain("Lakeside Chronic Pain Counseling");
@@ -120,6 +125,7 @@ describe("find page", () => {
     const query = "raw query text should have exactly one sink";
     const { fetcher, calls } = mockFindFetch({
       understood: null,
+      unmet: false,
       results: []
     });
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);

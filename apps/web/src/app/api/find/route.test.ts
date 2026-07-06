@@ -144,6 +144,53 @@ describe("POST /api/find", () => {
     }
   });
 
+  test("returns closest matches with unmet:true for a realistic sentence the tag filter would otherwise zero out", async () => {
+    const harness = await createHarness(
+      {
+        ANTHROPIC_API_KEY: undefined
+      },
+      {
+        safetyGate: nonDegradedSafetyGate
+      }
+    );
+    const text =
+      "Looking for someone to help with my teenage daughter's anxiety, evenings, we have insurance";
+    const response = await harness.post({ text });
+    const body = (await response.json()) as {
+      understood: null;
+      unmet: boolean;
+      results: Array<{ id: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.results.length).toBeGreaterThanOrEqual(3);
+    expect(body.results.map((result) => result.id)).toContain(
+      "provider_teen_denver"
+    );
+  });
+
+  test("marks the response unmet:true only when it is carrying nonempty closest-match results", async () => {
+    const harness = await createHarness(
+      {
+        ANTHROPIC_API_KEY: undefined
+      },
+      {
+        safetyGate: nonDegradedSafetyGate
+      }
+    );
+    const text = "chronic pain support near Detroit, we have insurance";
+    const response = await harness.post({ text });
+    const body = (await response.json()) as {
+      understood: null;
+      unmet: boolean;
+      results: Array<{ id: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.unmet).toBe(true);
+    expect(body.results.length).toBeGreaterThan(0);
+  });
+
   test("warns and annotates the find event when the safety gate is degraded", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const text = "Looking for teen anxiety CBT in Denver";

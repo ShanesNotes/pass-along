@@ -29,6 +29,7 @@ export type FindApiResponse =
     }
   | {
       readonly understood: null;
+      readonly unmet: boolean;
       readonly results: readonly FindApiCard[];
     };
 
@@ -79,6 +80,7 @@ function parseFindApiResponse(value: unknown): FindApiResponse {
 
   return {
     understood: null,
+    unmet: booleanField(value, "unmet"),
     results: value.results.map(parseFindCard)
   };
 }
