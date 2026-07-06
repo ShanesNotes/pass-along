@@ -38,14 +38,22 @@ describe("eval runner", () => {
     });
   });
 
-  test("marks extract and match placeholder suites as skipped", async () => {
+  test("marks extract placeholder suite as skipped and runs match", async () => {
     const report = await runEval(["extract", "match"], "all");
 
     expect(report.suites.map((suite) => suite.status)).toEqual([
       "SKIPPED",
-      "SKIPPED"
+      "PASSED"
     ]);
-    expect(report.summary.skipped).toBe(4);
+    expect(report.suites[1]).toMatchObject({
+      suite: "match",
+      total: 12,
+      passed: 12,
+      metric: "precision_at_3",
+      metric_value: 1,
+      threshold_met: true
+    });
+    expect(report.summary.skipped).toBe(2);
   });
 
   test("supports a pluggable judge", async () => {

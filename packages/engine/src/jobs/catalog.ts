@@ -11,6 +11,7 @@ import {
   type JobDefinition,
   type JobHandlerInput
 } from "./runner.js";
+import { embedRecommendation } from "./embed-recommendation.js";
 
 export const EVENT_TYPES = [
   "submission.received",
@@ -177,7 +178,11 @@ const embedRecommendationJob = defineJob({
       input.step,
       identity,
       "embedRecommendation",
-      () => ({ recommendationId, embedded: false }),
+      () =>
+        embedRecommendation({
+          recommendationId,
+          storage: input.storage
+        }),
       input.now()
     );
   }

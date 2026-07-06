@@ -1,0 +1,486 @@
+{
+  "providers": [
+    {
+      "id": "provider_teen_denver",
+      "name": "North Star Teen Therapy",
+      "credential": "LPC",
+      "kind": "therapist",
+      "loc": "Denver, CO",
+      "verified": true
+    },
+    {
+      "id": "provider_postpartum_austin",
+      "name": "Juniper Perinatal Counseling",
+      "credential": "LCSW",
+      "kind": "therapist",
+      "loc": "Austin, TX",
+      "verified": true
+    },
+    {
+      "id": "provider_emdr_austin",
+      "name": "Hill Country Trauma Center",
+      "credential": "Treatment Center",
+      "kind": "facility",
+      "loc": "Austin, TX",
+      "verified": true
+    },
+    {
+      "id": "provider_family_denver",
+      "name": "Cedar Table Family Therapy",
+      "credential": "LMFT",
+      "kind": "therapist",
+      "loc": "Denver, CO",
+      "verified": true
+    },
+    {
+      "id": "provider_recovery_austin",
+      "name": "Bluebonnet Recovery Collective",
+      "credential": "Treatment Center",
+      "kind": "facility",
+      "loc": "Austin, TX",
+      "verified": true
+    },
+    {
+      "id": "provider_med_mgmt_denver",
+      "name": "Front Range Medication Clinic",
+      "credential": "Psychiatric NP",
+      "kind": "therapist",
+      "loc": "Denver, CO",
+      "verified": true
+    },
+    {
+      "id": "provider_lgbtq_telehealth",
+      "name": "Open Path Queer Wellness",
+      "credential": "LCSW",
+      "kind": "therapist",
+      "loc": "Austin, TX",
+      "verified": true
+    },
+    {
+      "id": "provider_ocd_denver",
+      "name": "Clear Loop OCD Care",
+      "credential": "PhD",
+      "kind": "therapist",
+      "loc": "Denver, CO",
+      "verified": true
+    },
+    {
+      "id": "provider_pain_detroit",
+      "name": "Lakeside Chronic Pain Counseling",
+      "credential": "LMSW",
+      "kind": "therapist",
+      "loc": "Detroit, MI",
+      "verified": true
+    },
+    {
+      "id": "provider_eating_denver",
+      "name": "Willow Eating Recovery",
+      "credential": "Group Practice",
+      "kind": "facility",
+      "loc": "Denver, CO",
+      "verified": true
+    },
+    {
+      "id": "provider_spanish_austin",
+      "name": "Casa Clara Family Counseling",
+      "credential": "LMFT",
+      "kind": "therapist",
+      "loc": "Austin, TX",
+      "verified": true
+    },
+    {
+      "id": "provider_responder_denver",
+      "name": "Signal House First Responder Care",
+      "credential": "LPC",
+      "kind": "therapist",
+      "loc": "Denver, CO",
+      "verified": true
+    },
+    {
+      "id": "provider_grief_austin",
+      "name": "Riverbend Grief Counseling",
+      "credential": "LCSW",
+      "kind": "therapist",
+      "loc": "Austin, TX",
+      "verified": false
+    },
+    {
+      "id": "provider_child_play_detroit",
+      "name": "Maple Room Child Therapy",
+      "credential": "Play Therapy Center",
+      "kind": "facility",
+      "loc": "Detroit, MI",
+      "verified": true
+    },
+    {
+      "id": "provider_college_austin",
+      "name": "West Campus Counseling",
+      "credential": "LPC",
+      "kind": "therapist",
+      "loc": "Austin, TX",
+      "verified": true
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "rec_001",
+      "provider_id": "provider_teen_denver",
+      "kind": "therapist",
+      "tags": ["anxiety", "teen", "cbt", "evenings", "school"],
+      "keystone": "The first plan for teen anxiety that worked after school instead of only in the office.",
+      "story": "Denver parent recommendation for teen anxiety, school avoidance, CBT skills, and evening appointments."
+    },
+    {
+      "id": "rec_002",
+      "provider_id": "provider_teen_denver",
+      "kind": "therapist",
+      "tags": ["anxiety", "teen", "panic", "cbt"],
+      "keystone": "They taught panic steps my daughter could use before class started.",
+      "story": "Teen panic and anxiety support with practical CBT routines for school mornings in Denver."
+    },
+    {
+      "id": "rec_003",
+      "provider_id": "provider_teen_denver",
+      "kind": "therapist",
+      "tags": ["adhd", "teen", "skills coaching", "family"],
+      "keystone": "Homework stopped being the whole family argument every night.",
+      "story": "Teen ADHD skills coaching, parent routines, and family planning for Denver households."
+    },
+    {
+      "id": "rec_004",
+      "provider_id": "provider_postpartum_austin",
+      "kind": "therapist",
+      "tags": ["postpartum", "anxiety", "new parent", "telehealth"],
+      "keystone": "She treated postpartum anxiety as something we could name and work with.",
+      "story": "Austin new parent postpartum anxiety recommendation with telehealth and gentle planning."
+    },
+    {
+      "id": "rec_005",
+      "provider_id": "provider_postpartum_austin",
+      "kind": "therapist",
+      "tags": ["postpartum", "depression", "new parent", "sliding scale"],
+      "keystone": "The sliding scale option meant I did not have to wait until work started again.",
+      "story": "Postpartum depression support for a new parent in Austin with sliding scale scheduling."
+    },
+    {
+      "id": "rec_006",
+      "provider_id": "provider_postpartum_austin",
+      "kind": "therapist",
+      "tags": ["infertility", "grief", "new parent", "talk therapy"],
+      "keystone": "They understood that fertility grief did not vanish when the baby arrived.",
+      "story": "New parent and infertility grief recommendation for Austin talk therapy."
+    },
+    {
+      "id": "rec_007",
+      "provider_id": "provider_emdr_austin",
+      "kind": "facility",
+      "tags": ["ptsd", "veteran", "emdr", "trauma"],
+      "keystone": "The EMDR pacing finally matched what my nervous system could tolerate.",
+      "story": "Austin veteran PTSD and trauma recommendation for EMDR at a treatment center."
+    },
+    {
+      "id": "rec_008",
+      "provider_id": "provider_emdr_austin",
+      "kind": "facility",
+      "tags": ["ptsd", "first responder", "emdr", "nightmares"],
+      "keystone": "They took the nightmares seriously without making me retell everything at intake.",
+      "story": "First responder PTSD, nightmares, and EMDR support at an Austin facility."
+    },
+    {
+      "id": "rec_009",
+      "provider_id": "provider_emdr_austin",
+      "kind": "facility",
+      "tags": ["trauma", "adult", "somatic", "group"],
+      "keystone": "Group work made the trauma skills feel less abstract.",
+      "story": "Adult trauma recommendation for somatic skills and group support in Austin."
+    },
+    {
+      "id": "rec_010",
+      "provider_id": "provider_family_denver",
+      "kind": "therapist",
+      "tags": ["relationship", "couple", "family systems", "communication"],
+      "keystone": "The sessions slowed the argument down enough for both of us to hear it.",
+      "story": "Denver couples recommendation for relationship communication and family systems therapy."
+    },
+    {
+      "id": "rec_011",
+      "provider_id": "provider_family_denver",
+      "kind": "therapist",
+      "tags": ["grief", "family", "relationship", "family systems"],
+      "keystone": "They helped us grieve at different speeds without turning it into blame.",
+      "story": "Family grief and relationship support in Denver using family systems therapy."
+    },
+    {
+      "id": "rec_012",
+      "provider_id": "provider_family_denver",
+      "kind": "therapist",
+      "tags": ["parenting", "family", "teen", "communication"],
+      "keystone": "The plan included the parents, not just the teenager with the appointment.",
+      "story": "Parenting and family communication recommendation for a Denver teen household."
+    },
+    {
+      "id": "rec_013",
+      "provider_id": "provider_recovery_austin",
+      "kind": "facility",
+      "tags": ["substance use", "adult", "group", "dbt"],
+      "keystone": "The group structure made recovery feel possible on weeks I wanted to disappear from appointments.",
+      "story": "Austin adult substance use recovery, DBT groups, and facility structure recommendation."
+    },
+    {
+      "id": "rec_014",
+      "provider_id": "provider_recovery_austin",
+      "kind": "facility",
+      "tags": ["substance use", "anxiety", "adult", "intensive outpatient"],
+      "keystone": "The intensive outpatient rhythm gave my anxiety fewer gaps to take over.",
+      "story": "Adult substance use and anxiety recommendation for intensive outpatient care in Austin."
+    },
+    {
+      "id": "rec_015",
+      "provider_id": "provider_recovery_austin",
+      "kind": "facility",
+      "tags": ["substance use", "family", "group", "education"],
+      "keystone": "Family night helped us stop guessing what support was useful.",
+      "story": "Family education and group recovery support for substance use at an Austin facility."
+    },
+    {
+      "id": "rec_016",
+      "provider_id": "provider_med_mgmt_denver",
+      "kind": "therapist",
+      "tags": ["adhd", "adult", "medication management", "insurance"],
+      "keystone": "They explained each medication change in normal language and checked side effects.",
+      "story": "Denver adult ADHD medication management recommendation with insurance-friendly visits."
+    },
+    {
+      "id": "rec_017",
+      "provider_id": "provider_med_mgmt_denver",
+      "kind": "therapist",
+      "tags": ["depression", "adult", "medication management", "sleep"],
+      "keystone": "Sleep and mood were tracked together instead of treated as separate problems.",
+      "story": "Adult depression, sleep, and medication management recommendation in Denver."
+    },
+    {
+      "id": "rec_018",
+      "provider_id": "provider_med_mgmt_denver",
+      "kind": "therapist",
+      "tags": ["bipolar", "adult", "medication management", "telehealth"],
+      "keystone": "Telehealth follow-ups kept medication changes from drifting for weeks.",
+      "story": "Adult bipolar medication management and telehealth follow-up recommendation in Denver."
+    },
+    {
+      "id": "rec_019",
+      "provider_id": "provider_lgbtq_telehealth",
+      "kind": "therapist",
+      "tags": ["lgbtq", "anxiety", "adult", "telehealth"],
+      "keystone": "I did not have to explain queer basics before talking about anxiety.",
+      "story": "Austin LGBTQ adult anxiety recommendation with telehealth access."
+    },
+    {
+      "id": "rec_020",
+      "provider_id": "provider_lgbtq_telehealth",
+      "kind": "therapist",
+      "tags": ["gender identity", "teen", "family", "telehealth"],
+      "keystone": "The family sessions kept respect practical instead of just aspirational.",
+      "story": "Teen gender identity, family support, and telehealth recommendation in Austin."
+    },
+    {
+      "id": "rec_021",
+      "provider_id": "provider_lgbtq_telehealth",
+      "kind": "therapist",
+      "tags": ["relationship", "lgbtq", "couple", "eft"],
+      "keystone": "The couples work held both of our histories without taking sides.",
+      "story": "LGBTQ couples relationship recommendation with EFT in Austin."
+    },
+    {
+      "id": "rec_022",
+      "provider_id": "provider_ocd_denver",
+      "kind": "therapist",
+      "tags": ["ocd", "exposure erp", "anxiety", "structured"],
+      "keystone": "ERP homework was structured enough that I knew what to practice.",
+      "story": "Denver OCD and anxiety recommendation for exposure ERP with structured practice."
+    },
+    {
+      "id": "rec_023",
+      "provider_id": "provider_ocd_denver",
+      "kind": "therapist",
+      "tags": ["ocd", "teen", "exposure erp", "parenting"],
+      "keystone": "Parents got coaching so reassurance did not undo the ERP work.",
+      "story": "Teen OCD, parent coaching, and exposure ERP recommendation in Denver."
+    },
+    {
+      "id": "rec_024",
+      "provider_id": "provider_ocd_denver",
+      "kind": "therapist",
+      "tags": ["panic", "adult", "cbt", "structured"],
+      "keystone": "The panic plan was concrete enough to use in a grocery aisle.",
+      "story": "Adult panic and CBT recommendation for structured skills in Denver."
+    },
+    {
+      "id": "rec_025",
+      "provider_id": "provider_pain_detroit",
+      "kind": "therapist",
+      "tags": ["chronic pain", "depression", "adult", "acceptance"],
+      "keystone": "They never treated pain as something I could positive-think away.",
+      "story": "Detroit adult chronic pain and depression recommendation with acceptance-based therapy."
+    },
+    {
+      "id": "rec_026",
+      "provider_id": "provider_pain_detroit",
+      "kind": "therapist",
+      "tags": ["chronic illness", "anxiety", "adult", "telehealth"],
+      "keystone": "Telehealth meant flares did not cancel the whole month.",
+      "story": "Adult chronic illness and anxiety recommendation with telehealth in Detroit."
+    },
+    {
+      "id": "rec_027",
+      "provider_id": "provider_pain_detroit",
+      "kind": "therapist",
+      "tags": ["caregiver", "burnout", "depression", "adult"],
+      "keystone": "Caregiver burnout was treated as real, not selfish.",
+      "story": "Detroit caregiver burnout and depression recommendation for adult support."
+    },
+    {
+      "id": "rec_028",
+      "provider_id": "provider_eating_denver",
+      "kind": "facility",
+      "tags": ["eating disorder", "teen", "family", "nutrition"],
+      "keystone": "The family plan made meals less like a courtroom.",
+      "story": "Denver teen eating disorder recovery recommendation with family and nutrition support."
+    },
+    {
+      "id": "rec_029",
+      "provider_id": "provider_eating_denver",
+      "kind": "facility",
+      "tags": ["eating disorder", "adult", "group", "body image"],
+      "keystone": "Group made body image work less isolating.",
+      "story": "Adult eating disorder and body image group recommendation at a Denver facility."
+    },
+    {
+      "id": "rec_030",
+      "provider_id": "provider_eating_denver",
+      "kind": "facility",
+      "tags": ["anxiety", "teen", "nutrition", "intensive outpatient"],
+      "keystone": "Anxiety around meals finally had a daily plan.",
+      "story": "Teen anxiety, nutrition, and intensive outpatient support recommendation in Denver."
+    },
+    {
+      "id": "rec_031",
+      "provider_id": "provider_spanish_austin",
+      "kind": "therapist",
+      "tags": ["family", "spanish speaking", "relationship", "parenting"],
+      "keystone": "The Spanish sessions let my parents participate without my translating every feeling.",
+      "story": "Austin Spanish speaking family therapy recommendation for parenting and relationship repair."
+    },
+    {
+      "id": "rec_032",
+      "provider_id": "provider_spanish_austin",
+      "kind": "therapist",
+      "tags": ["anxiety", "adult", "spanish speaking", "cbt"],
+      "keystone": "CBT made more sense when the examples sounded like our household.",
+      "story": "Spanish speaking adult anxiety and CBT recommendation in Austin."
+    },
+    {
+      "id": "rec_033",
+      "provider_id": "provider_spanish_austin",
+      "kind": "therapist",
+      "tags": ["grief", "family", "spanish speaking", "faith sensitive"],
+      "keystone": "They respected faith without turning grief into a lesson.",
+      "story": "Spanish speaking family grief recommendation in Austin with faith-sensitive care."
+    },
+    {
+      "id": "rec_034",
+      "provider_id": "provider_responder_denver",
+      "kind": "therapist",
+      "tags": ["first responder", "burnout", "ptsd", "nightmares"],
+      "keystone": "They understood why burnout and nightmares showed up together after shifts.",
+      "story": "Denver first responder burnout, PTSD, and nightmares recommendation."
+    },
+    {
+      "id": "rec_035",
+      "provider_id": "provider_responder_denver",
+      "kind": "therapist",
+      "tags": ["stress", "burnout", "adult", "structured"],
+      "keystone": "The structured plan made stress feel less like a character flaw.",
+      "story": "Adult stress and burnout recommendation with structured care in Denver."
+    },
+    {
+      "id": "rec_036",
+      "provider_id": "provider_responder_denver",
+      "kind": "therapist",
+      "tags": ["anger", "first responder", "relationship", "cbt"],
+      "keystone": "Anger got handled as a signal, not a shame spiral.",
+      "story": "First responder anger, relationship strain, and CBT recommendation in Denver."
+    },
+    {
+      "id": "rec_037",
+      "provider_id": "provider_grief_austin",
+      "kind": "therapist",
+      "tags": ["grief", "adult", "talk therapy", "widowed"],
+      "keystone": "They let me talk about my spouse in the present tense for a while.",
+      "story": "Austin adult grief and widowed support recommendation for talk therapy."
+    },
+    {
+      "id": "rec_038",
+      "provider_id": "provider_grief_austin",
+      "kind": "therapist",
+      "tags": ["grief", "child", "family", "play"],
+      "keystone": "The play sessions gave our child a way to show grief before naming it.",
+      "story": "Child grief and family support recommendation in Austin with play therapy."
+    },
+    {
+      "id": "rec_039",
+      "provider_id": "provider_grief_austin",
+      "kind": "therapist",
+      "tags": ["life transitions", "adult", "grief", "talk therapy"],
+      "keystone": "Retirement grief was treated like a real life transition.",
+      "story": "Adult life transitions and grief recommendation for Austin talk therapy."
+    },
+    {
+      "id": "rec_040",
+      "provider_id": "provider_child_play_detroit",
+      "kind": "facility",
+      "tags": ["child", "autism", "play", "parenting"],
+      "keystone": "Play therapy helped us understand sensory overload before behavior charts.",
+      "story": "Detroit child autism, sensory overload, play therapy, and parenting recommendation."
+    },
+    {
+      "id": "rec_041",
+      "provider_id": "provider_child_play_detroit",
+      "kind": "facility",
+      "tags": ["child", "anxiety", "play", "family"],
+      "keystone": "Our child practiced brave steps through play before trying them at school.",
+      "story": "Child anxiety and family support recommendation with play therapy in Detroit."
+    },
+    {
+      "id": "rec_042",
+      "provider_id": "provider_child_play_detroit",
+      "kind": "facility",
+      "tags": ["parenting", "adhd", "child", "skills coaching"],
+      "keystone": "The parent coaching made mornings less chaotic.",
+      "story": "Detroit child ADHD and parenting skills coaching recommendation."
+    },
+    {
+      "id": "rec_043",
+      "provider_id": "provider_college_austin",
+      "kind": "therapist",
+      "tags": ["college student", "anxiety", "telehealth", "cbt"],
+      "keystone": "Telehealth let me keep therapy during finals instead of pausing.",
+      "story": "Austin college student anxiety recommendation for telehealth CBT."
+    },
+    {
+      "id": "rec_044",
+      "provider_id": "provider_college_austin",
+      "kind": "therapist",
+      "tags": ["social anxiety", "college student", "group", "cbt"],
+      "keystone": "The group was small enough that social anxiety work did not feel impossible.",
+      "story": "College student social anxiety and group CBT recommendation in Austin."
+    },
+    {
+      "id": "rec_045",
+      "provider_id": "provider_college_austin",
+      "kind": "therapist",
+      "tags": ["life transitions", "adult", "identity", "talk therapy"],
+      "keystone": "Graduation anxiety was treated as a real transition, not immaturity.",
+      "story": "Adult life transitions and identity support recommendation near Austin campus."
+    }
+  ]
+}

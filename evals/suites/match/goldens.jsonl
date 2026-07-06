@@ -1,2 +1,12 @@
-{"suite":"match","id":"match_placeholder_001","query_id":"q_placeholder_001","expect_top3_contains":["rec_placeholder_001"]}
-{"suite":"match","id":"match_placeholder_002","query_id":"q_placeholder_002","expect_top3_contains":["rec_placeholder_002"]}
+{"suite":"match","id":"match_teen_anxiety_denver","input":"Denver teen anxiety CBT after school therapist","query_id":"q_teen_anxiety_denver","expect_top3_contains":["rec_001"]}
+{"suite":"match","id":"match_postpartum_austin","input":"Austin postpartum anxiety new parent telehealth","query_id":"q_postpartum_austin","expect_top3_contains":["rec_004"]}
+{"suite":"match","id":"match_veteran_ptsd_emdr","input":"Austin veteran PTSD EMDR trauma facility","query_id":"q_veteran_ptsd_emdr","expect_top3_contains":["rec_007"]}
+{"suite":"match","id":"match_family_grief_denver","input":"Denver family grief relationship family systems therapist","query_id":"q_family_grief_denver","expect_top3_contains":["rec_011"]}
+{"suite":"match","id":"match_substance_group","input":"Austin substance use adult group DBT facility","query_id":"q_substance_group","expect_top3_contains":["rec_013"]}
+{"suite":"match","id":"match_adult_adhd_medication","input":"Denver adult ADHD medication management insurance","query_id":"q_adult_adhd_medication","expect_top3_contains":["rec_016"]}
+{"suite":"match","id":"match_lgbtq_anxiety","input":"Austin LGBTQ anxiety telehealth adult therapist","query_id":"q_lgbtq_anxiety","expect_top3_contains":["rec_019"]}
+{"suite":"match","id":"match_ocd_erp","input":"Denver OCD exposure ERP structured anxiety","query_id":"q_ocd_erp","expect_top3_contains":["rec_022"]}
+{"suite":"match","id":"match_chronic_pain_depression","input":"Detroit chronic pain depression adult acceptance therapist","query_id":"q_chronic_pain_depression","expect_top3_contains":["rec_025"]}
+{"suite":"match","id":"match_eating_disorder_teen","input":"Denver teen eating disorder family nutrition facility","query_id":"q_eating_disorder_teen","expect_top3_contains":["rec_028"]}
+{"suite":"match","id":"match_spanish_family","input":"Austin Spanish speaking family parenting relationship therapist","query_id":"q_spanish_family","expect_top3_contains":["rec_031"]}
+{"suite":"match","id":"match_first_responder_burnout","input":"Denver first responder burnout PTSD nightmares therapist","query_id":"q_first_responder_burnout","expect_top3_contains":["rec_034"]}

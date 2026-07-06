@@ -1,0 +1,8 @@
+{
+  "match": {
+    "precision_at_3": 1,
+    "goldens": 12,
+    "corpus": "evals/fixtures/corpus/recommendations.json",
+    "recorded_at": "2026-07-06T00:00:00.000Z"
+  }
+}

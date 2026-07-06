@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -125,10 +126,11 @@ export const SUITE_CONFIG: Record<SuiteName, SuiteConfig> = {
     threshold: {
       metric: "precision_at_3",
       min: "baseline"
-    },
-    skipReason: "Placeholder suite; baseline-backed matching judge arrives with retrieval work."
+    }
   }
 };
+
+const baselinePath = join(evalRoot, "baselines.json");
 
 export async function runEval(
   suites: readonly SuiteName[],
@@ -228,13 +230,18 @@ async function runSuite(
       metricNumerator += comparison.matched;
       metricDenominator += comparison.total;
     }
+
+    if (golden.suite === "match") {
+      metricNumerator += result.score ?? (result.passed ? 1 : 0);
+      metricDenominator += 1;
+    }
   }
 
   const passed = goldenReports.filter((golden) => golden.passed).length;
   const failed = goldenReports.length - passed;
   const metricValue =
     metricDenominator === 0 ? 1 : metricNumerator / metricDenominator;
-  const thresholdMet = thresholdMetByMetric(config.threshold, metricValue);
+  const thresholdMet = thresholdMetByMetric(config, metricValue);
 
   return {
     suite: config.suite,
@@ -252,11 +259,13 @@ async function runSuite(
 }
 
 function thresholdMetByMetric(
-  threshold: ThresholdConfig,
+  config: SuiteConfig,
   metricValue: number
 ): boolean {
+  const threshold = config.threshold;
+
   if (threshold.min === "baseline") {
-    return true;
+    return metricValue >= baselineMetric(config.suite, threshold.metric);
   }
 
   return metricValue >= threshold.min;
@@ -413,18 +422,21 @@ function gitOutputFromThrown(error: unknown): string | undefined {
   return undefined;
 }
 
-export function defaultJudge(golden: GoldenCase): JudgeResult {
+export function defaultJudge(
+  golden: GoldenCase
+): JudgeResult | Promise<JudgeResult> {
   switch (golden.suite) {
     case "crisis":
       return judgeCrisis(golden);
     case "understand":
       return judgeUnderstand(golden);
     case "extract":
-    case "match":
       return {
         actual: "SKIPPED",
         passed: false
       };
+    case "match":
+      return judgeMatch(golden);
   }
 }
 
@@ -449,6 +461,244 @@ function judgeUnderstand(golden: GoldenCase): JudgeResult {
     passed: comparison.matched === comparison.total,
     score: comparison.total === 0 ? 1 : comparison.matched / comparison.total
   };
+}
+
+let matchHarnessPromise:
+  | Promise<{
+      search(input: string): Promise<readonly string[]>;
+    }>
+  | undefined;
+
+async function judgeMatch(golden: GoldenCase): Promise<JudgeResult> {
+  const input = golden.input ?? golden.query_id ?? "";
+  const expected = golden.expect_top3_contains ?? [];
+  const harness = await matchHarness();
+  const top3 = await harness.search(input);
+  const matched = expected.filter((id) => top3.includes(id)).length;
+  const score = expected.length === 0 ? 1 : matched / expected.length;
+
+  return {
+    actual: { top3 },
+    passed: matched === expected.length,
+    score
+  };
+}
+
+async function matchHarness(): Promise<{
+  search(input: string): Promise<readonly string[]>;
+}> {
+  if (!matchHarnessPromise) {
+    matchHarnessPromise = createMatchHarness();
+  }
+
+  return matchHarnessPromise;
+}
+
+async function createMatchHarness(): Promise<{
+  search(input: string): Promise<readonly string[]>;
+}> {
+  const corpus = readMatchCorpus();
+  const tags = [...new Set(corpus.recommendations.flatMap((rec) => rec.tags))];
+  const records = corpus.recommendations.map((recommendation) => {
+    const provider = corpus.providers.find(
+      (candidate) => candidate.id === recommendation.provider_id
+    );
+
+    if (!provider) {
+      throw new Error(`Missing provider ${recommendation.provider_id}`);
+    }
+
+    return {
+      id: recommendation.id,
+      kind: recommendation.kind,
+      loc: provider.loc,
+      tags: recommendation.tags,
+      vector: devHashEmbedding(
+        [
+          provider.name,
+          provider.credential,
+          provider.kind,
+          provider.loc,
+          recommendation.tags.join(" "),
+          recommendation.keystone,
+          recommendation.story
+        ].join("\n")
+      )
+    };
+  });
+
+  return {
+    async search(input) {
+      const vector = devHashEmbedding(input);
+      const tagFilters = inferMatchTags(input, tags);
+      const location = locationFromInput(input);
+      const kind = kindFromInput(input);
+
+      return records
+        .filter((record) => kind === undefined || record.kind === kind)
+        .filter(
+          (record) =>
+            location === undefined ||
+            normalizeText(record.loc).includes(normalizeText(location))
+        )
+        .filter((record) =>
+          tagFilters.every((tag) => record.tags.includes(tag))
+        )
+        .map((record) => ({
+          id: record.id,
+          score: cosine(vector, record.vector)
+        }))
+        .sort((left, right) => {
+          const byScore = right.score - left.score;
+          return byScore === 0 ? left.id.localeCompare(right.id) : byScore;
+        })
+        .slice(0, 3)
+        .map((result) => result.id);
+    }
+  };
+}
+
+type MatchCorpus = {
+  readonly providers: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly credential: string;
+    readonly kind: "therapist" | "facility";
+    readonly loc: string;
+  }[];
+  readonly recommendations: readonly {
+    readonly id: string;
+    readonly provider_id: string;
+    readonly kind: "therapist" | "facility";
+    readonly tags: readonly string[];
+    readonly keystone: string;
+    readonly story: string;
+  }[];
+};
+
+function readMatchCorpus(): MatchCorpus {
+  return JSON.parse(
+    readFileSync(
+      join(evalRoot, "fixtures", "corpus", "recommendations.json"),
+      "utf8"
+    )
+  ) as MatchCorpus;
+}
+
+function inferMatchTags(
+  input: string,
+  tags: readonly string[]
+): readonly string[] {
+  const normalized = ` ${normalizeMatchText(input)} `;
+  return tags
+    .filter((tag) => normalized.includes(` ${normalizeMatchText(tag)} `))
+    .sort((left, right) => right.length - left.length);
+}
+
+function devHashEmbedding(input: string, dimensions = 1536): readonly number[] {
+  const vector = new Array<number>(dimensions).fill(0);
+  const tokens = tokenizeForEmbedding(input);
+  const features = [
+    ...tokens.map((token) => ({ token, weight: 1 })),
+    ...tokenNgrams(tokens, 2).map((token) => ({ token, weight: 1.4 })),
+    ...tokenNgrams(tokens, 3).map((token) => ({ token, weight: 1.8 }))
+  ];
+
+  for (const feature of features) {
+    const digest = createHash("sha256").update(feature.token).digest();
+    const bucket = digest.readUInt32BE(0) % dimensions;
+    const sign = digest[4] === undefined || digest[4] % 2 === 0 ? 1 : -1;
+    vector[bucket] = (vector[bucket] ?? 0) + sign * feature.weight;
+  }
+
+  return normalizeVector(vector);
+}
+
+function tokenizeForEmbedding(input: string): readonly string[] {
+  return normalizeMatchText(input)
+    .split(/\s+/u)
+    .filter((token) => token.length > 1);
+}
+
+function normalizeMatchText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/lgbtq\+/gu, "lgbtq")
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim()
+    .replace(/\s+/gu, " ");
+}
+
+function tokenNgrams(tokens: readonly string[], size: number): readonly string[] {
+  const grams: string[] = [];
+
+  for (let index = 0; index <= tokens.length - size; index += 1) {
+    grams.push(tokens.slice(index, index + size).join(" "));
+  }
+
+  return grams;
+}
+
+function normalizeVector(vector: readonly number[]): readonly number[] {
+  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+
+  if (magnitude === 0) {
+    return [...vector];
+  }
+
+  return vector.map((value) => value / magnitude);
+}
+
+function cosine(left: readonly number[], right: readonly number[]): number {
+  let dot = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    dot += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
+}
+
+function locationFromInput(input: string): string | undefined {
+  const normalized = normalizeText(input);
+
+  if (normalized.includes("denver")) {
+    return "Denver";
+  }
+
+  if (normalized.includes("austin")) {
+    return "Austin";
+  }
+
+  if (normalized.includes("detroit")) {
+    return "Detroit";
+  }
+
+  return undefined;
+}
+
+function kindFromInput(input: string): "therapist" | "facility" | undefined {
+  const normalized = normalizeText(input);
+
+  if (
+    /\b(facility|center|clinic|collective|group|intensive outpatient)\b/u.test(
+      normalized
+    )
+  ) {
+    return "facility";
+  }
+
+  if (/\b(therapist|counselor|counseling)\b/u.test(normalized)) {
+    return "therapist";
+  }
+
+  return undefined;
 }
 
 function heuristicUnderstand(text: string): Record<string, unknown> {
@@ -636,6 +886,23 @@ function expectedForReport(golden: GoldenCase): unknown {
       expect_top3_contains: golden.expect_top3_contains
     }
   );
+}
+
+function baselineMetric(
+  suite: SuiteName,
+  metric: ThresholdConfig["metric"]
+): number {
+  const parsed = JSON.parse(readFileSync(baselinePath, "utf8")) as unknown;
+  const suiteBaseline = asRecord(parsed)?.[suite];
+  const metricValue = asRecord(suiteBaseline)?.[metric];
+
+  if (typeof metricValue !== "number") {
+    throw new Error(
+      `Missing baseline metric ${suite}.${metric} in ${baselinePath}`
+    );
+  }
+
+  return metricValue;
 }
 
 function writeReport(report: EvalReport): string {
