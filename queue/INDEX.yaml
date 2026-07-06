@@ -87,8 +87,20 @@ waves:
         status: shipped # 9e0c665 + ed89336
         route: codex
 
+  full-send-wave:
+    note: "2026-07-06 evening — direction-agnostic professional build; live Gemini via adapter"
+    tickets:
+      - {id: PA-013, packet: L1-S3, title: Real query understanding (live model), status: shipped, route: codex}
+      - {id: PA-014, packet: L2-S1+S2, title: Live intake pipeline + pass flow, status: shipped, route: codex}
+      - {id: PA-015, packet: L3-S2, title: Functional admin review bench, status: shipped, route: codex}
+      - {id: PA-016, packet: L1-S4, title: Grounded re-rank (live model), status: shipped, route: codex}
+      - {id: PA-018, packet: L3-S3, title: License verification framework, status: shipped, route: codex}
+      - {id: PA-019, packet: metrics (not in spec), title: Founder metrics dashboard, status: shipped, route: sonnet-agent}
+      - {id: PA-020, packet: L4-S2, title: Grounded aggregation pages, status: shipped, route: sonnet-agent}
+      - {id: PA-021, packet: landing (not in spec), title: Product-is-the-landing restructure, status: shipped, route: sonnet-agent}
+
   wave-4-plus:
-    note: "L1-S3..L5-S3 enqueue after the meeting resolves discovery unknowns; wave map in spec §5 stands."
+    note: "Remaining spec packets (L1-S5 full, L3-S1 historical-crisis nuance, L3-S4 freshness, L3-S5, L4-S1/S3/S4, L5 MCP) enqueue after the meeting resolves discovery unknowns."
     tickets: []
 
 routing_law:
