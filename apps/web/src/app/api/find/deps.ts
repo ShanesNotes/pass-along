@@ -1,0 +1,301 @@
+import { createHash } from "node:crypto";
+import { performance } from "node:perf_hooks";
+import fixtureCorpusJson from "../../../../../../evals/fixtures/corpus/recommendations.json";
+import {
+  cardsFromMatches,
+  corpusTags,
+  createInMemoryVectorStoreFromCorpus,
+  inferTagFiltersFromText,
+  type FindResultCard,
+  type ProviderKind,
+  type RetrievalCorpus,
+  type RetrievalFilters,
+  type VectorStorePort
+} from "../../../../../../packages/engine/src/retrieval/index";
+import { embedTextDevOnly } from "../../../../../../packages/engine/src/llm/embed";
+import {
+  safetyGate as defaultSafetyGate,
+  type SafetyGateResult
+} from "../../../../../../packages/engine/src/safety/index";
+import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index";
+import type {
+  EventCatalog,
+  UnderstoodQuery
+} from "../../../../../../packages/core/src/index";
+
+export type FindPerformedEvent = Extract<
+  EventCatalog,
+  { type: "find.performed" }
+>;
+
+export interface FindEventsPort {
+  emit(event: FindPerformedEvent): Promise<void>;
+}
+
+export interface QueryAuditRow {
+  readonly query_hash: string;
+  readonly understood: null;
+}
+
+export interface QueryAuditPort {
+  upsert(row: QueryAuditRow): Promise<void>;
+}
+
+export interface FindRouteDeps {
+  readonly env?: NodeJS.ProcessEnv;
+  readonly corpus: RetrievalCorpus;
+  readonly store: VectorStorePort;
+  readonly events: FindEventsPort;
+  readonly queries?: QueryAuditPort;
+  readonly safetyGate?: (text: string) => Promise<SafetyGateResult>;
+  readonly embed: (text: string) => Promise<{
+    readonly vector: readonly number[];
+    readonly metadata: EmbeddingMetadata;
+  }>;
+  readonly now?: () => number;
+}
+
+interface FindRequestBody {
+  readonly text: string;
+  readonly kind?: ProviderKind | "either";
+  readonly location?: string;
+}
+
+const DEFAULT_RETRIEVAL_TOP_N = 40;
+const DEFAULT_CARD_LIMIT = 6;
+const CRISIS_FIND_RESPONSE = {
+  crisis: true,
+  support: {
+    lifeline: "988",
+    message: "Nothing was stored."
+  }
+} as const;
+
+let defaultDepsPromise: Promise<FindRouteDeps> | undefined;
+
+export function createFindPostHandler(deps: FindRouteDeps) {
+  return async (request: Request): Promise<Response> => {
+    const env = deps.env ?? process.env;
+
+    const parsed = parseFindRequestBody(await readJson(request));
+
+    if (!parsed.ok) {
+      return json({ error: "INVALID_FIND_REQUEST" }, 400);
+    }
+
+    const startedAt = deps.now?.() ?? performance.now();
+    const body = parsed.body;
+    const gate = await (deps.safetyGate ?? defaultRouteSafetyGate(env))(
+      body.text
+    );
+
+    if (gate.crisis) {
+      return json(CRISIS_FIND_RESPONSE);
+    }
+
+    warnIfSafetyGateDegraded(gate);
+
+    const queryHash = sha256(body.text);
+    const embedding = await deps.embed(body.text);
+    const filters = filtersFor(body, deps.corpus);
+    const understoodJson = understoodForEvent(body, filters.tags ?? []);
+    const matches = await deps.store.search({
+      vector: embedding.vector,
+      topN: DEFAULT_RETRIEVAL_TOP_N,
+      filters
+    });
+    const cards = cardsFromMatches(matches, deps.corpus, DEFAULT_CARD_LIMIT);
+    const latencyMs = Math.max(
+      0,
+      Math.round((deps.now?.() ?? performance.now()) - startedAt)
+    );
+
+    await deps.queries?.upsert({
+      query_hash: queryHash,
+      understood: null
+    });
+    await deps.events.emit({
+      type: "find.performed",
+      payload: {
+        understood_json: understoodJson,
+        query_hash_sha256: queryHash,
+        result_count: cards.length,
+        latency_ms: latencyMs,
+        ...(gate.degraded ? { degraded: true } : {})
+      }
+    });
+
+    return json({
+      understood: null,
+      results: cards
+    } satisfies {
+      understood: null;
+      results: readonly FindResultCard[];
+    });
+  };
+}
+
+export function sha256(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+export async function defaultFindRouteDeps(): Promise<FindRouteDeps> {
+  if (!defaultDepsPromise) {
+    defaultDepsPromise = createDefaultFindRouteDeps();
+  }
+
+  return defaultDepsPromise;
+}
+
+async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
+  const corpus = fixtureCorpusJson as RetrievalCorpus;
+  const embed = async (text: string) => {
+    const embedding = embedTextDevOnly(text);
+    return { vector: embedding.vector, metadata: embedding.metadata };
+  };
+  const store = await createInMemoryVectorStoreFromCorpus(corpus, embed);
+
+  return {
+    corpus,
+    store,
+    embed,
+    safetyGate: (text) => defaultSafetyGate(text, { env: process.env }),
+    events: {
+      async emit() {
+        return undefined;
+      }
+    }
+  };
+}
+
+function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
+  return (text: string) => defaultSafetyGate(text, { env });
+}
+
+function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
+  if (!gate.degraded) {
+    return;
+  }
+
+  console.warn("find.safety_gate_degraded", {
+    reason: gate.tier2.reason
+  });
+}
+
+function filtersFor(
+  body: FindRequestBody,
+  corpus: RetrievalCorpus
+): RetrievalFilters {
+  const tags = inferTagFiltersFromText(body.text, corpusTags(corpus));
+  const filters: {
+    kind?: ProviderKind | "either";
+    location?: string;
+    tags?: readonly string[];
+  } = {};
+
+  if (body.kind !== undefined) {
+    filters.kind = body.kind;
+  }
+
+  if (body.location !== undefined) {
+    filters.location = body.location;
+  }
+
+  if (tags.length > 0) {
+    filters.tags = tags;
+  }
+
+  return filters;
+}
+
+function understoodForEvent(
+  body: FindRequestBody,
+  tags: readonly string[]
+): UnderstoodQuery {
+  const understood: UnderstoodQuery = {
+    issues: tags.map((tag) => ({
+      value: tag,
+      vocab: true,
+      confidence: 0.7
+    })),
+    kind: body.kind ?? "either",
+    preferences: {},
+    confidence: tags.length > 0 || body.location !== undefined ? 0.6 : 0.3
+  };
+
+  if (body.location !== undefined && body.location.trim().length > 0) {
+    understood.location = {
+      text: body.location.trim()
+    };
+  }
+
+  return understood;
+}
+
+async function readJson(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function parseFindRequestBody(
+  value: unknown
+): { readonly ok: true; readonly body: FindRequestBody } | { readonly ok: false } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ok: false };
+  }
+
+  const record = value as Record<string, unknown>;
+  const text = record.text;
+  const kind = record.kind;
+  const location = record.location;
+
+  if (typeof text !== "string" || text.trim().length === 0) {
+    return { ok: false };
+  }
+
+  if (
+    kind !== undefined &&
+    kind !== "therapist" &&
+    kind !== "facility" &&
+    kind !== "either"
+  ) {
+    return { ok: false };
+  }
+
+  if (location !== undefined && typeof location !== "string") {
+    return { ok: false };
+  }
+
+  const body: {
+    text: string;
+    kind?: ProviderKind | "either";
+    location?: string;
+  } = {
+    text
+  };
+
+  if (kind !== undefined) {
+    body.kind = kind;
+  }
+
+  if (location !== undefined) {
+    body.location = location;
+  }
+
+  return {
+    ok: true,
+    body
+  };
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json"
+    }
+  });
+}

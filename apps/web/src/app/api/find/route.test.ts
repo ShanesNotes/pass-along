@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, test, vi } from "vitest";
 import {
   createInMemoryVectorStoreFromCorpus,
@@ -8,14 +9,35 @@ import type { SafetyGateResult } from "../../../../../../packages/engine/src/saf
 import { EventCatalogSchema } from "../../../../../../packages/core/src/index.js";
 import {
   createFindPostHandler,
+  defaultFindRouteDeps,
   sha256,
   type FindEventsPort,
   type FindPerformedEvent,
   type QueryAuditPort,
   type QueryAuditRow
-} from "./route.js";
+} from "./deps";
 
 describe("POST /api/find", () => {
+  test("default deps initialize from the web app cwd", async () => {
+    const originalCwd = process.cwd();
+    const webAppDir = fileURLToPath(new URL("../../../../", import.meta.url));
+
+    try {
+      process.chdir(webAppDir);
+      const deps = await defaultFindRouteDeps();
+
+      expect(deps.corpus.recommendations.length).toBeGreaterThan(0);
+      await expect(
+        deps.store.search({
+          vector: (await deps.embed("teen anxiety CBT in Denver")).vector,
+          topN: 1
+        })
+      ).resolves.toHaveLength(1);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   test("crisis path returns support response and stores nothing", async () => {
     const harness = await createHarness({
       ANTHROPIC_API_KEY: undefined

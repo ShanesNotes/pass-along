@@ -9,8 +9,8 @@ export type UnderstoodQuery =
   | { kind: "low-confidence"; clarifyingQuestion: string }
   | { kind: "understood"; facets: Facets };
 
-// Synthetic detection keywords only — no realistic crisis narratives are stored anywhere.
-// This is the "safetyGate" behavior from Build-Spec §2.5, transposed to run client-side on fixtures.
+// Display-side echo only. The real find flow always posts raw text to /api/find,
+// where the server safety gate decides whether search can continue.
 const CRISIS_KEYWORDS = [
   "suicide",
   "suicidal",
@@ -67,6 +67,8 @@ const PREFERENCE_KEYWORDS: Record<string, string> = {
   affordable: "sliding scale"
 };
 
+export type FacetKind = "issue" | "population" | "prefer";
+
 function matchKeywords(text: string, map: Record<string, string>): string[] {
   const found = new Set<string>();
   for (const [needle, label] of Object.entries(map)) {
@@ -102,4 +104,46 @@ export function understandQuery(rawText: string): UnderstoodQuery {
       prefers
     }
   };
+}
+
+export function removeFacetFromQueryText(
+  rawText: string,
+  kind: FacetKind,
+  value: string
+): string {
+  const keywordMap =
+    kind === "issue"
+      ? ISSUE_KEYWORDS
+      : kind === "population"
+        ? POPULATION_KEYWORDS
+        : PREFERENCE_KEYWORDS;
+  const variants = [
+    value,
+    ...Object.entries(keywordMap)
+      .filter(([, label]) => label === value)
+      .map(([keyword]) => keyword)
+  ];
+
+  const uniqueVariants = [...new Set(variants)]
+    .filter((variant) => variant.trim().length > 0)
+    .sort((left, right) => right.length - left.length);
+  let amended = rawText;
+
+  for (const variant of uniqueVariants) {
+    const escaped = escapeRegExp(variant);
+    amended = amended.replace(
+      new RegExp(`(^|[^A-Za-z0-9])${escaped}(?:'s)?(?=$|[^A-Za-z0-9])`, "gi"),
+      "$1"
+    );
+  }
+
+  return amended
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,.;:!?]+|[\s,.;:!?]+$/g, "")
+    .trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
