@@ -13,6 +13,53 @@ const PIPELINE_STEPS = [
   { label: "Published", detail: "your story appears anonymously, credited only to \"a recommender\"" }
 ];
 
+type PassApiSuccessResponse = {
+  recommendation_id: string;
+  status: "published" | "review_pending" | "received" | "scrubbing" | "enriching" | "scored" | "rejected" | "removed";
+  provider: { id: string; name: string };
+  scrubbed_story: string;
+  pii_findings_count: number;
+  tags: Array<{
+    type: string;
+    value: string;
+    vocab: boolean;
+    confidence: number;
+  }>;
+  keystone_quote: {
+    text: string;
+    start: number;
+    end: number;
+  };
+  quality: {
+    specificity: number;
+    lived_experience: number;
+    ad_smell: number;
+    dup_similarity: number;
+    flags: readonly string[];
+  };
+  sources: {
+    scrub: "model" | "fallback";
+    extract: "model" | "fallback";
+    quality: "model" | "fallback";
+  };
+  review_status: string;
+  transitions: Array<{
+    action: string;
+    from: string | null;
+    to: string;
+  }>;
+};
+
+type PassApiCrisisResponse = {
+  crisis: true;
+  support: {
+    lifeline: "988";
+    message: string;
+  };
+};
+
+type PassApiResponse = PassApiSuccessResponse | PassApiCrisisResponse;
+
 export function PassClient() {
   const [providerQuery, setProviderQuery] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<TypeaheadApiMatch | undefined>(undefined);
@@ -20,7 +67,9 @@ export function PassClient() {
   const [searchingProviders, setSearchingProviders] = useState(false);
   const [who, setWho] = useState<string | undefined>(undefined);
   const [story, setStory] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<PassApiResponse | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (selectedProvider) {
@@ -64,17 +113,77 @@ export function PassClient() {
     };
   }, [providerQuery, selectedProvider]);
 
-  const canSubmit = Boolean(selectedProvider) && Boolean(who) && story.trim().length >= 20;
+  const providerReady = Boolean(selectedProvider) || providerQuery.trim().length >= 2;
+  const canSubmit = providerReady && Boolean(who) && story.trim().length >= 20 && !submitting;
 
-  if (submitted) {
+  if (result && "crisis" in result) {
+    return (
+      <main>
+        <section className="pa-crisis">
+          <h2>You are not alone right now</h2>
+          <p>
+            This recommendation was not saved. For immediate support in the U.S., call or text 988.
+          </p>
+          <a className="call" href="tel:988">Call or text 988</a>
+          <p>{result.support.message}</p>
+          <button className="pa-btn ghost" onClick={resetForm}>
+            Back to pass along
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (result) {
     return (
       <main>
         <div className="pa-eyebrow">Pass along</div>
         <h1>Thank you for passing it along</h1>
-        <p className="pa-sub">Here&rsquo;s what happens to your story next:</p>
-        <PipelineStrip activeIndex={0} />
+        <p className="pa-sub">
+          We structured the recommendation at write time. Here is the version readers and reviewers see.
+        </p>
+        <PipelineStrip activeIndex={result.status === "published" ? 3 : 2} />
+        <div className="pa-card" style={{ marginTop: "1.5rem" }}>
+          <p className="pa-section-label" style={{ marginTop: 0 }}>What readers will see</p>
+          <p style={{ marginTop: 0 }}>{result.scrubbed_story}</p>
+          <p style={{ color: "var(--ink-soft)", fontSize: "0.9rem" }}>
+            {result.pii_findings_count} identifying detail{result.pii_findings_count === 1 ? "" : "s"} scrubbed · scrub {result.sources.scrub}
+          </p>
+
+          <p className="pa-section-label">Extracted tags</p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {result.tags.map((tag) => (
+              <span key={`${tag.type}:${tag.value}`} className="pa-tag shared">
+                {tag.type}: {tag.value.replaceAll("_", " ")}
+              </span>
+            ))}
+          </div>
+
+          <blockquote className="pa-keystone">
+            {result.keystone_quote.text}
+            <footer>Keystone quote · extract {result.sources.extract}</footer>
+          </blockquote>
+
+          <p className="pa-section-label">Quality</p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <span className="pa-tag">specificity {asPercent(result.quality.specificity)}</span>
+            <span className="pa-tag">lived experience {asPercent(result.quality.lived_experience)}</span>
+            <span className="pa-tag">ad smell {asPercent(result.quality.ad_smell)}</span>
+            {result.quality.flags.length > 0 ? (
+              result.quality.flags.map((flag) => (
+                <span key={flag} className="pa-tag">{flag.replaceAll("_", " ")}</span>
+              ))
+            ) : (
+              <span className="pa-tag shared">no review flags</span>
+            )}
+          </div>
+
+          <p className="pa-notice" style={{ margin: "1.25rem 0 0" }}>
+            A human reviews flagged stories before publish. {result.review_status}
+          </p>
+        </div>
         <p style={{ marginTop: "1.5rem" }}>
-          <button className="pa-btn" onClick={() => setSubmitted(false)}>
+          <button className="pa-btn" onClick={resetForm}>
             Pass along another recommendation
           </button>
         </p>
@@ -179,11 +288,16 @@ export function PassClient() {
         </section>
 
         <div style={{ marginTop: "1.25rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-          <button className="pa-btn" disabled={!canSubmit} onClick={() => setSubmitted(true)}>
-            Submit recommendation
+          <button className="pa-btn" disabled={!canSubmit} onClick={() => void submitRecommendation()}>
+            {submitting ? "Submitting..." : "Submit recommendation"}
           </button>
           <Stub>attach a photo</Stub>
         </div>
+        {error && (
+          <p className="pa-notice" style={{ marginTop: "1rem" }}>
+            {error}
+          </p>
+        )}
       </div>
 
       <div style={{ marginTop: "2rem" }}>
@@ -194,6 +308,59 @@ export function PassClient() {
       </div>
     </main>
   );
+
+  async function submitRecommendation() {
+    if (!who || !canSubmit) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(undefined);
+
+    try {
+      const body = selectedProvider
+        ? {
+            providerId: selectedProvider.id,
+            story,
+            forWhom: [who]
+          }
+        : {
+            newProvider: {
+              name: providerQuery.trim()
+            },
+            story,
+            forWhom: [who]
+          };
+      const response = await fetch("/api/pass", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        setError("We could not submit this recommendation. Please check the fields and try again.");
+        return;
+      }
+
+      setResult((await response.json()) as PassApiResponse);
+    } catch {
+      setError("We could not submit this recommendation. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function resetForm() {
+    setProviderQuery("");
+    setSelectedProvider(undefined);
+    setMatches([]);
+    setWho(undefined);
+    setStory("");
+    setResult(undefined);
+    setError(undefined);
+  }
 }
 
 function PipelineStrip({ activeIndex }: { activeIndex?: number }) {
@@ -217,4 +384,8 @@ function PipelineStrip({ activeIndex }: { activeIndex?: number }) {
       ))}
     </div>
   );
+}
+
+function asPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }

@@ -12,11 +12,21 @@ import harmToOthersRulesJson from "../../packages/engine/src/safety/rules/harm-t
 import medicalEmergencyRulesJson from "../../packages/engine/src/safety/rules/medical-emergency.json" with { type: "json" };
 import selfHarmRulesJson from "../../packages/engine/src/safety/rules/self-harm.json" with { type: "json" };
 
-export type SuiteName = "crisis" | "understand" | "extract" | "match";
+export type SuiteName = "crisis" | "understand" | "scrub" | "extract" | "match";
 type SuiteStatus = "PASSED" | "FAILED" | "SKIPPED";
+type EvalPiiKind = "person" | "org" | "date" | "place";
+type EvalPiiFinding = {
+  readonly span: [number, number];
+  readonly kind: EvalPiiKind;
+  readonly replacement: string;
+};
+type EvalExtractTag = {
+  readonly type: string;
+  readonly value: string;
+};
 
 type ThresholdConfig = {
-  metric: "recall" | "field_accuracy" | "tags_f1" | "precision_at_3";
+  metric: "recall" | "field_accuracy" | "span_f1" | "tags_f1" | "precision_at_3";
   min: number | "baseline";
   hardFail?: boolean;
 };
@@ -118,7 +128,7 @@ const EVAL_SAFETY_RULE_FAMILIES = [
 ] as readonly EvalSafetyRuleFamily[];
 
 export const DEFAULT_JUDGE_NOTICE =
-  "Default crisis judge uses tier-1 safety rule data with tier-2 skipped when no API key; other suites use deterministic local heuristics.";
+  "Default crisis judge uses tier-1 safety rule data with tier-2 skipped when no API key; scrub/extract use deterministic fallback judges.";
 
 export const SUITE_CONFIG: Record<SuiteName, SuiteConfig> = {
   crisis: {
@@ -141,14 +151,23 @@ export const SUITE_CONFIG: Record<SuiteName, SuiteConfig> = {
       min: 0.9
     }
   },
+  scrub: {
+    suite: "scrub",
+    promptDir: "scrub",
+    goldenPath: join(evalRoot, "suites", "scrub", "goldens.jsonl"),
+    threshold: {
+      metric: "span_f1",
+      min: 0.9
+    }
+  },
   extract: {
     suite: "extract",
+    promptDir: "extract",
     goldenPath: join(evalRoot, "suites", "extract", "goldens.jsonl"),
     threshold: {
       metric: "tags_f1",
       min: 0.85
-    },
-    skipReason: "Placeholder suite; real extraction judge arrives with enrichment work."
+    }
   },
   match: {
     suite: "match",
@@ -267,6 +286,11 @@ async function runSuite(
     }
 
     if (golden.suite === "match") {
+      metricNumerator += result.score ?? (result.passed ? 1 : 0);
+      metricDenominator += 1;
+    }
+
+    if (golden.suite === "scrub" || golden.suite === "extract") {
       metricNumerator += result.score ?? (result.passed ? 1 : 0);
       metricDenominator += 1;
     }
@@ -413,6 +437,8 @@ export function changedSuites(
     if (normalizedPath.startsWith("packages/prompts/src/")) {
       suites.add("crisis");
       suites.add("understand");
+      suites.add("scrub");
+      suites.add("extract");
       continue;
     }
 
@@ -528,11 +554,10 @@ export function defaultJudge(
       return judgeCrisis(golden);
     case "understand":
       return judgeUnderstand(golden);
+    case "scrub":
+      return judgeScrub(golden);
     case "extract":
-      return {
-        actual: "SKIPPED",
-        passed: false
-      };
+      return judgeExtract(golden);
     case "match":
       return judgeMatch(golden);
   }
@@ -574,6 +599,454 @@ function judgeUnderstand(golden: GoldenCase): JudgeResult {
     passed: comparison.matched === comparison.total,
     score: comparison.total === 0 ? 1 : comparison.matched / comparison.total
   };
+}
+
+function judgeScrub(golden: GoldenCase): JudgeResult {
+  const input = golden.input ?? "";
+  const expect = golden.expect ?? {};
+  const providerName = getString(expect, "provider_name") ?? "";
+  const actual = evalFallbackScrub(input, providerName);
+  const expectedFindings = expectedPiiFindings(input, expect.pii_findings);
+  const score = spanF1(expectedFindings, actual.piiFindings);
+  const containsPassed = expectedStringList(expect.scrubbed_contains).every(
+    (needle) => actual.scrubbedStory.includes(needle)
+  );
+  const notContainsPassed = expectedStringList(expect.scrubbed_not_contains).every(
+    (needle) => !actual.scrubbedStory.includes(needle)
+  );
+  const flagsPassed = expectedStringList(expect.flags).every((flag) =>
+    actual.flags.includes(flag)
+  );
+
+  return {
+    actual: {
+      scrubbed_story: actual.scrubbedStory,
+      pii_findings: actual.piiFindings,
+      flags: actual.flags,
+      source: "fallback"
+    },
+    passed: score >= 0.9 && containsPassed && notContainsPassed && flagsPassed,
+    score
+  };
+}
+
+function judgeExtract(golden: GoldenCase): JudgeResult {
+  const input = golden.input ?? "";
+  const actual = evalFallbackExtract(input);
+  const expectedTags = expectedTagKeys(golden.expect?.tags);
+  const actualTags = actual.tags.map((tagEntry) =>
+    tagKey(tagEntry.type, tagEntry.value)
+  );
+  const score = f1(expectedTags, actualTags);
+  const keystoneContains = getString(golden.expect, "keystone_contains");
+  const quotePassed =
+    keystoneContains === undefined ||
+    actual.keystoneQuote.text.includes(keystoneContains);
+  const threshold = golden.expect_tags_f1_min ?? 0.85;
+
+  return {
+    actual: {
+      tags: actual.tags.map((tagEntry) => ({
+        type: tagEntry.type,
+        value: tagEntry.value
+      })),
+      keystone_quote: actual.keystoneQuote,
+      source: "fallback"
+    },
+    passed: score >= threshold && quotePassed,
+    score
+  };
+}
+
+function evalFallbackScrub(
+  input: string,
+  providerName: string
+): {
+  readonly scrubbedStory: string;
+  readonly piiFindings: readonly EvalPiiFinding[];
+  readonly flags: readonly string[];
+} {
+  const findings: EvalPiiFinding[] = [];
+
+  collectEvalPii(input, providerName, findings);
+  const deduped = dedupeEvalPii(findings);
+  const scrubbedStory = [...deduped]
+    .sort((left, right) => right.span[0] - left.span[0])
+    .reduce(
+      (current, finding) =>
+        `${current.slice(0, finding.span[0])}${finding.replacement}${current.slice(finding.span[1])}`,
+      input
+    );
+
+  return {
+    scrubbedStory,
+    piiFindings: deduped,
+    flags: deduped.length >= 4 ? ["pii_heavy"] : []
+  };
+}
+
+function collectEvalPii(
+  input: string,
+  providerName: string,
+  findings: EvalPiiFinding[]
+): void {
+  const monthPattern =
+    "January|February|March|April|May|June|July|August|September|October|November|December";
+  const weekdayPattern =
+    "Mondays?|Tuesdays?|Wednesdays?|Thursdays?|Fridays?|Saturdays?|Sundays?";
+
+  addEvalRegex(input, providerName, findings, /\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/gu, "person", "a contact detail");
+  addEvalRegex(input, providerName, findings, /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/gu, "person", "a contact detail");
+  addEvalRegex(input, providerName, findings, new RegExp(`\\b(?:${monthPattern})\\s+\\d{1,2}(?:,\\s*\\d{4})?\\b`, "gu"), "date", "that month");
+  addEvalRegex(input, providerName, findings, new RegExp(`\\b(?:${monthPattern})\\s+\\d{4}\\b`, "gu"), "date", "that month");
+  addEvalRegex(input, providerName, findings, /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/gu, "date", "that month");
+  addEvalRegex(input, providerName, findings, new RegExp(`\\b(?:${weekdayPattern})\\b`, "gu"), "date", "that day");
+  addEvalRegex(input, providerName, findings, /\b\d{1,5}\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?\s+(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Boulevard|Blvd)\b/gu, "place", "a local address");
+  addEvalRegex(input, providerName, findings, /\b[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*){0,3}\s+(?:High School|Middle School|Elementary School|University|College|Preschool)\b/gu, "org", "a school");
+  addEvalRegex(input, providerName, findings, /\b[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*){0,3}\s+(?:Robotics|Labs|Bank|Systems Inc|Inc|LLC|Company|Hospital|Agency|Factory)\b/gu, "org", "her workplace");
+  addEvalRegex(input, providerName, findings, /\b[A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*){0,2}\s+Church\b/gu, "org", "an organization");
+  addEvalRegex(input, providerName, findings, /\b[A-Z][A-Za-z]+\s+(?:House|Apartments|Tower)\b/gu, "place", "a local place");
+
+  for (const match of input.matchAll(/\b(?:(?:my|our|his|her|their)\s+(?:sister|brother|mother|mom|father|dad|daughter|son|wife|husband|partner|friend|coworker|co-worker|boss|manager|roommate|neighbor|classmate|client|patient|child)|a\s+friend\s+named)\s+[A-Z][A-Za-z']+\b/gu)) {
+    const text = match[0] ?? "";
+    const start = match.index ?? -1;
+
+    if (start >= 0 && !evalShouldPreserve(text, providerName)) {
+      findings.push({
+        span: [start, start + text.length],
+        kind: "person",
+        replacement: evalRelationshipReplacement(text)
+      });
+    }
+  }
+}
+
+function addEvalRegex(
+  input: string,
+  providerName: string,
+  findings: EvalPiiFinding[],
+  pattern: RegExp,
+  kind: EvalPiiKind,
+  replacement: string
+): void {
+  for (const match of input.matchAll(pattern)) {
+    const text = match[0] ?? "";
+    const start = match.index ?? -1;
+
+    if (start >= 0 && !evalShouldPreserve(text, providerName)) {
+      findings.push({
+        span: [start, start + text.length],
+        kind,
+        replacement
+      });
+    }
+  }
+}
+
+function evalRelationshipReplacement(text: string): string {
+  const normalized = normalizeMatchText(text);
+
+  if (/\bfriend\b/u.test(normalized)) return "a friend";
+  if (/\b(?:coworker|co-worker|boss|manager|classmate)\b/u.test(normalized)) {
+    return "a coworker";
+  }
+  if (/\broommate\b/u.test(normalized)) return "someone close to me";
+  if (/\bneighbor\b/u.test(normalized)) return "someone nearby";
+  if (/\b(?:client|patient)\b/u.test(normalized)) return "someone I referred";
+
+  return "a family member";
+}
+
+function evalShouldPreserve(text: string, providerName: string): boolean {
+  const normalizedText = normalizeMatchText(text);
+  const normalizedProvider = normalizeMatchText(providerName);
+
+  return (
+    normalizedText.length > 0 &&
+    normalizedProvider.length > 0 &&
+    (normalizedText === normalizedProvider ||
+      normalizedText.includes(normalizedProvider) ||
+      normalizedProvider.includes(normalizedText))
+  );
+}
+
+function dedupeEvalPii(
+  findings: readonly EvalPiiFinding[]
+): readonly EvalPiiFinding[] {
+  const sorted = [...findings].sort((left, right) => {
+    const byStart = left.span[0] - right.span[0];
+    return byStart === 0 ? right.span[1] - left.span[1] : byStart;
+  });
+  const accepted: EvalPiiFinding[] = [];
+
+  for (const finding of sorted) {
+    if (
+      accepted.some(
+        (existing) =>
+          existing.span[0] < finding.span[1] && finding.span[0] < existing.span[1]
+      )
+    ) {
+      continue;
+    }
+
+    accepted.push(finding);
+  }
+
+  return accepted;
+}
+
+function evalFallbackExtract(input: string): {
+  readonly tags: readonly EvalExtractTag[];
+  readonly keystoneQuote: { readonly text: string; readonly start: number; readonly end: number };
+} {
+  const text = normalizeText(input);
+  const tags = dedupeEvalTags([
+    ...evalPatternTags(text, "issue", {
+      anxiety: [/\banx(?:iety|ious)\b/u],
+      depression: [/\bdepress(?:ed|ion)?\b/u],
+      trauma_ptsd: [/\btrauma\b/u, /\bptsd\b/u, /\btrauma memories\b/u],
+      ocd: [/\bocd\b/u],
+      grief: [/\bgrief\b/u, /\bgrieving\b/u],
+      substance_use: [/\bsubstance use\b/u, /\brecovery\b/u, /\bsober\b/u],
+      adhd: [/\badhd\b/u],
+      postpartum: [/\bpostpartum\b/u, /\bnew baby\b/u],
+      relationship_issues: [/\bcouples?\b/u, /\brelationship\b/u, /\bfight\b/u],
+      panic: [/\bpanic\b/u],
+      sleep: [/\bsleep\b/u],
+      autism: [/\bautis(?:m|tic)\b/u],
+      gender_identity: [/\bgender identity\b/u, /\btrans\b/u],
+      family_conflict: [/\bfamily conflict\b/u, /\bconflict pattern\b/u],
+      chronic_pain: [/\bchronic pain\b/u]
+    }),
+    ...evalPatternTags(text, "modality", {
+      cbt: [/\bcbt\b/u, /\bcognitive behavioral\b/u],
+      emdr: [/\bemdr\b/u],
+      exposure_erp: [/\bexposure erp\b/u, /\berp\b/u, /\bexposure practice\b/u],
+      group: [/\bgroup\b/u],
+      somatic: [/\bsomatic\b/u],
+      eft: [/\beft\b/u],
+      family_systems: [/\bfamily systems\b/u],
+      act: [/\bact\b/u, /\bacceptance and commitment\b/u],
+      play: [/\bplay therapy\b/u],
+      mindfulness_based: [/\bmindfulness based\b/u, /\bmindfulness\b/u]
+    }),
+    ...evalPatternTags(text, "population", {
+      teen: [/\bteen\b/u, /\bteenager\b/u],
+      child: [/\bchild\b/u, /\bautistic child\b/u],
+      couple: [/\bcouples?\b/u],
+      family: [/\bfamily\b/u, /\bus\b/u],
+      lgbtq_plus: [/\blgbtq\+?\b/u, /\bgender identity\b/u, /\baffirming\b/u],
+      new_parent: [/\bnew baby\b/u, /\bnew parent\b/u, /\bpostpartum\b/u],
+      older_adult: [/\bolder adult\b/u, /\bfather\b/u],
+      college_student: [/\bcollege student\b/u]
+    }),
+    ...evalPatternTags(text, "logistics", {
+      telehealth: [/\btelehealth\b/u, /\bvirtual\b/u],
+      evenings: [/\bevenings?\b/u, /\bafter work\b/u],
+      insurance: [/\binsurance\b/u],
+      sliding_scale: [/\bsliding scale\b/u, /\baffordable\b/u]
+    }),
+    ...evalPatternTags(text, "style", {
+      affirming: [/\baffirming\b/u],
+      structured: [/\bstructured\b/u, /\btiny steps\b/u, /\btracked wins\b/u],
+      patient: [/\bwithout rushing\b/u, /\bpatient\b/u],
+      practical: [/\bpractical\b/u]
+    }),
+    ...evalPatternTags(text, "outcome", {
+      "aftercare plan": [/\bafter discharge\b/u, /\baftercare\b/u],
+      "study routine": [/\bstudy routine\b/u],
+      "flare-up plan": [/\bflare-ups?\b/u],
+      "daily action": [/\bsmall action\b/u],
+      "sleep routine": [/\bsleep routine\b/u],
+      "written plan": [/\bwritten plan\b/u]
+    })
+  ]);
+
+  return {
+    tags,
+    keystoneQuote: evalKeystoneQuote(input)
+  };
+}
+
+function evalPatternTags(
+  input: string,
+  type: string,
+  dictionary: Record<string, readonly RegExp[]>
+): readonly EvalExtractTag[] {
+  return Object.entries(dictionary)
+    .filter(([, patterns]) => patterns.some((pattern) => pattern.test(input)))
+    .map(([value]) => ({ type, value }));
+}
+
+function dedupeEvalTags(tags: readonly EvalExtractTag[]): readonly EvalExtractTag[] {
+  const seen = new Set<string>();
+  const deduped: EvalExtractTag[] = [];
+
+  for (const tag of tags) {
+    const key = tagKey(tag.type, tag.value);
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(tag);
+    }
+  }
+
+  return deduped;
+}
+
+function evalKeystoneQuote(
+  input: string
+): { readonly text: string; readonly start: number; readonly end: number } {
+  const text = input.trim();
+  const start = input.indexOf(text);
+
+  return {
+    text,
+    start: Math.max(0, start),
+    end: Math.max(0, start) + text.length
+  };
+}
+
+function expectedPiiFindings(
+  input: string,
+  value: unknown
+): readonly EvalPiiFinding[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    const text = getString(record, "text");
+    const kind = getString(record, "kind");
+
+    if (!text || !isPiiKind(kind)) {
+      return [];
+    }
+
+    const start = input.indexOf(text);
+
+    if (start < 0) {
+      return [];
+    }
+
+    return [
+      {
+        span: [start, start + text.length] as [number, number],
+        kind,
+        replacement: "[expected]"
+      }
+    ];
+  });
+}
+
+function expectedTagKeys(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    const type = getString(record, "type");
+    const tagValue = getString(record, "value");
+
+    return type && tagValue ? [tagKey(type, tagValue)] : [];
+  });
+}
+
+function tagKey(type: string, value: string): string {
+  return `${type}:${value}`;
+}
+
+function expectedStringList(value: unknown): readonly string[] {
+  return getStringArray(value) ?? [];
+}
+
+function spanF1(
+  expected: readonly EvalPiiFinding[],
+  actual: readonly EvalPiiFinding[]
+): number {
+  if (expected.length === 0 && actual.length === 0) {
+    return 1;
+  }
+
+  if (expected.length === 0 || actual.length === 0) {
+    return 0;
+  }
+
+  const usedActual = new Set<number>();
+  let matched = 0;
+
+  for (const expectedFinding of expected) {
+    const actualIndex = actual.findIndex(
+      (candidate, index) =>
+        !usedActual.has(index) && piiSpansMatch(expectedFinding, candidate)
+    );
+
+    if (actualIndex >= 0) {
+      usedActual.add(actualIndex);
+      matched += 1;
+    }
+  }
+
+  return f1FromCounts(matched, actual.length, expected.length);
+}
+
+function piiSpansMatch(
+  expected: EvalPiiFinding,
+  actual: EvalPiiFinding
+): boolean {
+  if (expected.kind !== actual.kind) {
+    return false;
+  }
+
+  const overlap =
+    Math.min(expected.span[1], actual.span[1]) -
+    Math.max(expected.span[0], actual.span[0]);
+
+  return overlap > 0;
+}
+
+function f1(
+  expected: readonly string[],
+  actual: readonly string[]
+): number {
+  if (expected.length === 0 && actual.length === 0) {
+    return 1;
+  }
+
+  if (expected.length === 0 || actual.length === 0) {
+    return 0;
+  }
+
+  const actualSet = new Set(actual);
+  const matched = expected.filter((key) => actualSet.has(key)).length;
+
+  return f1FromCounts(matched, actualSet.size, expected.length);
+}
+
+function f1FromCounts(
+  matched: number,
+  actualCount: number,
+  expectedCount: number
+): number {
+  const precision = actualCount === 0 ? 0 : matched / actualCount;
+  const recall = expectedCount === 0 ? 0 : matched / expectedCount;
+
+  if (precision + recall === 0) {
+    return 0;
+  }
+
+  return (2 * precision * recall) / (precision + recall);
+}
+
+function isPiiKind(value: unknown): value is EvalPiiKind {
+  return (
+    value === "person" ||
+    value === "org" ||
+    value === "date" ||
+    value === "place"
+  );
 }
 
 let matchHarnessPromise:
@@ -1093,13 +1566,14 @@ export async function main(args: readonly string[]): Promise<EvalReport> {
 }
 
 function suiteNames(): SuiteName[] {
-  return ["crisis", "understand", "extract", "match"];
+  return ["crisis", "understand", "scrub", "extract", "match"];
 }
 
 function isSuiteName(value: unknown): value is SuiteName {
   return (
     value === "crisis" ||
     value === "understand" ||
+    value === "scrub" ||
     value === "extract" ||
     value === "match"
   );

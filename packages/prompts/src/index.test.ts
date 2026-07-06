@@ -32,6 +32,8 @@ describe("prompt registry", () => {
   test("registry keys are exact id@version prompt refs", () => {
     expect(Object.keys(PROMPT_REGISTRY).sort()).toEqual([
       "crisis_gate@1",
+      "extract@1",
+      "scrub@1",
       "understand@1",
       "understand@2"
     ]);

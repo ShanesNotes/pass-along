@@ -39,7 +39,7 @@ describe("eval runner", () => {
 
     expect(plan).toEqual({
       mode: "all",
-      suites: ["crisis", "understand", "extract", "match"]
+      suites: ["crisis", "understand", "scrub", "extract", "match"]
     });
     expect(crisis?.total).toBeGreaterThanOrEqual(70);
     expect(crisis?.metric_value).toBe(1);
@@ -137,14 +137,29 @@ describe("eval runner", () => {
     });
   });
 
-  test("marks extract placeholder suite as skipped and runs match", async () => {
-    const report = await runEval(["extract", "match"], "all");
+  test("runs scrub, extract, and match suites", async () => {
+    const report = await runEval(["scrub", "extract", "match"], "all");
 
     expect(report.suites.map((suite) => suite.status)).toEqual([
-      "SKIPPED",
+      "PASSED",
+      "PASSED",
       "PASSED"
     ]);
+    expect(report.suites[0]).toMatchObject({
+      suite: "scrub",
+      total: 30,
+      passed: 30,
+      metric: "span_f1",
+      threshold_met: true
+    });
     expect(report.suites[1]).toMatchObject({
+      suite: "extract",
+      total: 15,
+      passed: 15,
+      metric: "tags_f1",
+      threshold_met: true
+    });
+    expect(report.suites[2]).toMatchObject({
       suite: "match",
       total: 12,
       passed: 12,
@@ -152,7 +167,7 @@ describe("eval runner", () => {
       metric_value: 1,
       threshold_met: true
     });
-    expect(report.summary.skipped).toBe(2);
+    expect(report.summary.skipped).toBe(0);
   });
 
   test("supports a pluggable judge", async () => {
@@ -184,7 +199,7 @@ describe("eval runner", () => {
         "packages/prompts/understand/goldens.jsonl",
         "packages/prompts/src/index.ts"
       ])
-    ).toEqual(["crisis", "match", "understand"]);
+    ).toEqual(["crisis", "extract", "match", "scrub", "understand"]);
   });
 
   test("parses git name-only output into changed path lines", () => {

@@ -4,7 +4,11 @@ import {
   type SubmissionState
 } from "../../../core/src/index.js";
 import { runIdempotentStep, type JobAttemptIdentity } from "./idempotency.js";
-import type { PublishDecision } from "./ports.js";
+import {
+  hasIntakeArtifactStorage,
+  hasMutablePublishDecision,
+  type PublishDecision
+} from "./ports.js";
 import {
   DEFAULT_RETRY_CONFIG,
   entityIdForEvent,
@@ -12,6 +16,11 @@ import {
   type JobHandlerInput
 } from "./runner.js";
 import { embedRecommendation } from "./embed-recommendation.js";
+import {
+  extractStory,
+  scoreQuality,
+  scrubStory
+} from "../intake/index.js";
 
 export const EVENT_TYPES = [
   "submission.received",
@@ -75,7 +84,7 @@ const scrubPiiJob = defineJob({
   name: "scrubPii",
   trigger: { kind: "internal" },
   async handler(input) {
-    return transitionStep(input, "scrubPii", "scrub");
+    return scrubPiiStep(input);
   }
 });
 
@@ -83,7 +92,7 @@ const extractTagsJob = defineJob({
   name: "extractTags",
   trigger: { kind: "internal" },
   async handler(input) {
-    return transitionStep(input, "extractTags", "extract");
+    return extractTagsStep(input);
   }
 });
 
@@ -91,7 +100,7 @@ const scoreQualityJob = defineJob({
   name: "scoreQuality",
   trigger: { kind: "internal" },
   async handler(input) {
-    return transitionStep(input, "scoreQuality", "score");
+    return scoreQualityStep(input);
   }
 });
 
@@ -333,33 +342,194 @@ function requireSubmissionEvent(
   return event;
 }
 
-async function transitionStep(
-  input: JobHandlerInput,
-  jobName: JobName,
-  action: SubmissionAction
-): Promise<{ readonly state: SubmissionState }> {
+async function scrubPiiStep(input: JobHandlerInput): Promise<{
+  readonly state: SubmissionState;
+  readonly source?: "model" | "fallback";
+  readonly piiFindingsCount?: number;
+  readonly flags?: readonly string[];
+}> {
   const event = requireSubmissionEvent(input.event);
   const recommendationId = event.payload.recommendation_id;
-  const identity = identityFor(jobName, recommendationId, input);
+  const identity = identityFor("scrubPii", recommendationId, input);
 
   return runIdempotentStep(
     input.storage,
     input.step,
     identity,
-    jobName,
+    "scrubPii",
     async () => {
-      const row = await input.storage.transitionRecommendation({
-        recommendationId,
-        action,
-        actor: SYSTEM_ACTOR,
-        metadata: { job_name: jobName },
-        idempotencyKey: `${identity.jobName}:${identity.entityId}:${identity.attemptGroup}:${action}`,
-        now: input.now()
-      });
-      return { state: row.toState };
+      const artifactStorage = hasIntakeArtifactStorage(input.storage)
+        ? input.storage
+        : undefined;
+      const source = await artifactStorage?.getRestrictedOriginalRecommendation(
+        recommendationId
+      );
+      const scrubResult = source
+        ? await scrubStory({
+            story: source.story,
+            providerName: source.providerName
+          })
+        : undefined;
+
+      if (scrubResult) {
+        await artifactStorage?.saveScrubResult(recommendationId, scrubResult);
+      }
+
+      const row = await transitionRecommendation(input, identity, "scrub");
+
+      return scrubResult === undefined
+        ? { state: row.toState }
+        : {
+            state: row.toState,
+            source: scrubResult.source,
+            piiFindingsCount: scrubResult.piiFindings.length,
+            flags: scrubResult.flags
+          };
     },
     input.now()
   );
+}
+
+async function extractTagsStep(input: JobHandlerInput): Promise<{
+  readonly state: SubmissionState;
+  readonly source?: "model" | "fallback";
+  readonly tagCount?: number;
+}> {
+  const event = requireSubmissionEvent(input.event);
+  const recommendationId = event.payload.recommendation_id;
+  const identity = identityFor("extractTags", recommendationId, input);
+
+  return runIdempotentStep(
+    input.storage,
+    input.step,
+    identity,
+    "extractTags",
+    async () => {
+      const artifactStorage = hasIntakeArtifactStorage(input.storage)
+        ? input.storage
+        : undefined;
+      const [source, scrubResult] = await Promise.all([
+        artifactStorage?.getRestrictedOriginalRecommendation(recommendationId),
+        artifactStorage?.getScrubResult(recommendationId)
+      ]);
+      const extractResult = scrubResult
+        ? await extractStory(
+            source
+              ? {
+                  scrubbedStory: scrubResult.scrubbedStory,
+                  forWhom: source.forWhom,
+                  piiFindings: scrubResult.piiFindings
+                }
+              : {
+                  scrubbedStory: scrubResult.scrubbedStory,
+                  piiFindings: scrubResult.piiFindings
+                }
+          )
+        : undefined;
+
+      if (extractResult) {
+        await artifactStorage?.saveExtractResult(
+          recommendationId,
+          extractResult
+        );
+      }
+
+      const row = await transitionRecommendation(input, identity, "extract");
+
+      return extractResult === undefined
+        ? { state: row.toState }
+        : {
+            state: row.toState,
+            source: extractResult.source,
+            tagCount: extractResult.enrichment.tags.length
+          };
+    },
+    input.now()
+  );
+}
+
+async function scoreQualityStep(input: JobHandlerInput): Promise<{
+  readonly state: SubmissionState;
+  readonly source?: "model" | "fallback";
+  readonly flags?: readonly string[];
+}> {
+  const event = requireSubmissionEvent(input.event);
+  const recommendationId = event.payload.recommendation_id;
+  const identity = identityFor("scoreQuality", recommendationId, input);
+
+  return runIdempotentStep(
+    input.storage,
+    input.step,
+    identity,
+    "scoreQuality",
+    async () => {
+      const artifactStorage = hasIntakeArtifactStorage(input.storage)
+        ? input.storage
+        : undefined;
+      const [scrubResult, extractResult] = await Promise.all([
+        artifactStorage?.getScrubResult(recommendationId),
+        artifactStorage?.getExtractResult(recommendationId)
+      ]);
+      const qualityResult =
+        scrubResult && extractResult
+          ? scoreQuality({
+              scrubbedStory: scrubResult.scrubbedStory,
+              enrichment: extractResult.enrichment
+            })
+          : undefined;
+
+      if (qualityResult) {
+        await artifactStorage?.saveQualityResult(
+          recommendationId,
+          qualityResult
+        );
+        if (hasMutablePublishDecision(input.storage)) {
+          input.storage.setPublishDecision(
+            recommendationId,
+            publishDecisionForFlags(qualityResult.flags)
+          );
+        }
+      }
+
+      const row = await transitionRecommendation(input, identity, "score");
+
+      return qualityResult === undefined
+        ? { state: row.toState }
+        : {
+            state: row.toState,
+            source: qualityResult.source,
+            flags: qualityResult.flags
+          };
+    },
+    input.now()
+  );
+}
+
+async function transitionRecommendation(
+  input: JobHandlerInput,
+  identity: JobAttemptIdentity,
+  action: SubmissionAction
+) {
+  return input.storage.transitionRecommendation({
+    recommendationId: identity.entityId,
+    action,
+    actor: SYSTEM_ACTOR,
+    metadata: { job_name: identity.jobName },
+    idempotencyKey: `${identity.jobName}:${identity.entityId}:${identity.attemptGroup}:${action}`,
+    now: input.now()
+  });
+}
+
+function publishDecisionForFlags(flags: readonly string[]): PublishDecision {
+  if (flags.length === 0) {
+    return { outcome: "publish" };
+  }
+
+  return {
+    outcome: "flag",
+    reasons: flags,
+    tier: "intake_quality"
+  };
 }
 
 async function applyPublishDecision(

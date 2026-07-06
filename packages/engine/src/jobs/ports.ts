@@ -1,10 +1,17 @@
 import {
   EventCatalogSchema,
   transition,
+  type RecEnrichment,
   type EventCatalog,
   type SubmissionAction,
   type SubmissionState
 } from "../../../core/src/index.js";
+import type {
+  ExtractStoryResult,
+  PiiFinding,
+  ScoreQualityResult,
+  ScrubStoryResult
+} from "../intake/index.js";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -117,6 +124,84 @@ export interface JobStoragePort {
   getDlqRow(dlqId: string): Promise<JobsDlqRow | undefined>;
   listDlq(): Promise<readonly JobsDlqRow[]>;
   markDlqReplayed(dlqId: string, replayedAt: Date): Promise<JobsDlqRow>;
+}
+
+export interface IntakeRecommendationSource {
+  readonly story: string;
+  readonly providerName: string;
+  readonly forWhom: readonly string[];
+}
+
+export interface IntakeArtifactStoragePort {
+  getRestrictedOriginalRecommendation(
+    recommendationId: string
+  ): Promise<IntakeRecommendationSource | undefined>;
+  saveScrubResult(
+    recommendationId: string,
+    result: ScrubStoryResult
+  ): Promise<void>;
+  getScrubResult(
+    recommendationId: string
+  ): Promise<
+    | {
+        readonly scrubbedStory: string;
+        readonly piiFindings: readonly PiiFinding[];
+        readonly flags: readonly string[];
+        readonly source: ScrubStoryResult["source"];
+      }
+    | undefined
+  >;
+  saveExtractResult(
+    recommendationId: string,
+    result: ExtractStoryResult
+  ): Promise<void>;
+  getExtractResult(
+    recommendationId: string
+  ): Promise<
+    | {
+        readonly enrichment: RecEnrichment;
+        readonly source: ExtractStoryResult["source"];
+      }
+    | undefined
+  >;
+  saveQualityResult(
+    recommendationId: string,
+    result: ScoreQualityResult
+  ): Promise<void>;
+  getQualityResult(
+    recommendationId: string
+  ): Promise<ScoreQualityResult | undefined>;
+}
+
+export function hasIntakeArtifactStorage(
+  value: unknown
+): value is IntakeArtifactStoragePort {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.getRestrictedOriginalRecommendation === "function" &&
+    typeof candidate.saveScrubResult === "function" &&
+    typeof candidate.getScrubResult === "function" &&
+    typeof candidate.saveExtractResult === "function" &&
+    typeof candidate.getExtractResult === "function" &&
+    typeof candidate.saveQualityResult === "function" &&
+    typeof candidate.getQualityResult === "function"
+  );
+}
+
+export function hasMutablePublishDecision(
+  value: unknown
+): value is Pick<InMemoryJobStorage, "setPublishDecision"> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { readonly setPublishDecision?: unknown }).setPublishDecision ===
+      "function"
+  );
 }
 
 export interface InMemoryJobStorage extends JobStoragePort {

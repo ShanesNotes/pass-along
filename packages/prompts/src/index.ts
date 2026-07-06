@@ -35,6 +35,18 @@ export const PROMPT_REGISTRY = {
     version: "1",
     filePath: join(promptRoot, "crisis_gate", "1.md"),
     goldensPath: join(promptRoot, "crisis_gate", "goldens.jsonl")
+  },
+  "scrub@1": {
+    id: "scrub",
+    version: "1",
+    filePath: join(promptRoot, "scrub", "1.md"),
+    goldensPath: join(promptRoot, "scrub", "goldens.jsonl")
+  },
+  "extract@1": {
+    id: "extract",
+    version: "1",
+    filePath: join(promptRoot, "extract", "1.md"),
+    goldensPath: join(promptRoot, "extract", "goldens.jsonl")
   }
 } as const satisfies Record<string, PromptRegistryEntry>;
 

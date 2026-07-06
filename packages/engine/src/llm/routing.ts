@@ -36,6 +36,22 @@ export const PROMPT_ROUTING = {
       temperature: 0,
       maxTokens: 300
     }
+  },
+  "scrub@1": {
+    provider: "google",
+    model: "gemini-3.1-flash-lite",
+    params: {
+      temperature: 0,
+      maxTokens: 900
+    }
+  },
+  "extract@1": {
+    provider: "google",
+    model: "gemini-3.1-flash-lite",
+    params: {
+      temperature: 0,
+      maxTokens: 1200
+    }
   }
 } as const satisfies Record<string, PromptRoute>;
 
