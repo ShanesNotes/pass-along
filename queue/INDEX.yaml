@@ -40,15 +40,15 @@ waves:
       - id: PA-004
         packet: L0-S4
         title: LLM adapter + prompt registry + eval runner
-        status: queued
+        status: in_flight
         route: codex
         depends: [PA-002]
       - id: PA-005
         packet: L0-S5
         title: Orchestration rail (jobs/events, stubbed handlers)
-        status: queued
+        status: queued # serialized after PA-004 (shared packages/engine)
         route: codex
-        depends: [PA-003]
+        depends: [PA-003, PA-004]
       - id: PA-006
         packet: wireframes (pre-meeting addition, not in spec)
         title: Clickable direction wireframes in apps/web (find / pass / profile / admin / directions index) on fixture data
