@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pass Along · MVP 1.2 — The Intelligence Release · Concept Build</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Nunito:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBFAF6;--cream:#F5F4ED;--card:#FFFFFF;--ink:#2C312D;--ink-soft:#5C645D;--ink-faint:#6E766F;
+  --line:#E7E8E0;--green:#3F8268;--deep:#2E6049;--green-soft:#E4EFE9;--sage:#4E8E86;--sage-soft:#E2EDEA;
+  --sun:#D7A33F;--sun-soft:#F4EBD2;--blush:#E9F1EB;
+  --radius:22px;--radius-sm:14px;
+  --shadow:0 2px 6px rgba(60,90,75,.06),0 14px 40px rgba(60,90,75,.10);
+  --shadow-sm:0 2px 10px rgba(60,90,75,.08);
+  --sans:"Nunito",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --serif:"Fraunces",Georgia,serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{margin:0;overflow-x:hidden}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.in{max-width:1080px;margin:0 auto;padding:0 32px}
+a{color:var(--deep)}
+em{font-style:italic}
+button{font-family:var(--sans)}
+
+.nav{position:sticky;top:0;z-index:500;background:rgba(251,250,246,.9);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+.nav-in{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:13px 32px;gap:12px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.logo .mark{width:31px;height:31px;flex:none}
+.logo .word{font-family:var(--serif);font-weight:600;font-size:21px;color:var(--ink);letter-spacing:-.01em}
+.ver-pill{font-size:11px;font-weight:800;color:var(--deep);background:var(--green-soft);border-radius:999px;padding:4px 11px;letter-spacing:.04em;text-transform:uppercase}
+.nav nav{display:flex;gap:18px;flex-wrap:wrap}
+.nav nav a{color:var(--ink-soft);text-decoration:none;font-weight:700;font-size:14px}
+.nav nav a:hover{color:var(--deep)}
+
+.eyebrow{font-size:12.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--sage);margin-bottom:16px}
+.btn{font-size:16px;font-weight:700;cursor:pointer;background:var(--green);color:#fff;border:none;border-radius:999px;padding:13px 26px;transition:transform .12s,box-shadow .12s,background .15s;text-decoration:none;display:inline-block}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(63,130,104,.30)}
+.btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line)}
+.btn.on-deep{background:#fff;color:var(--deep)}
+.btn.ghost.on-deep{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.55)}
+.section-h{font-family:var(--serif);font-weight:500;font-size:38px;line-height:1.12;letter-spacing:-.01em;color:var(--ink);margin:0 0 14px;text-wrap:balance}
+.section-h em{color:var(--green)}
+.section-sub{font-size:17.5px;line-height:1.65;color:var(--ink-soft);max-width:660px;margin:0}
+.panel{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.86em;background:var(--cream);border:1px solid var(--line);border-radius:7px;padding:2px 7px;color:var(--deep);white-space:nowrap}
+
+.hero{padding:76px 0 26px}
+.hero h1{font-family:var(--serif);font-weight:500;font-size:58px;line-height:1.05;letter-spacing:-.015em;color:var(--ink);margin:0 0 22px;max-width:880px;text-wrap:balance}
+.hero h1 em{color:var(--green)}
+.hero .sub{font-size:19px;line-height:1.65;color:var(--ink-soft);max-width:680px;margin:0 0 14px}
+.hero .posn{font-family:var(--serif);font-style:italic;font-size:18px;line-height:1.55;color:var(--deep);max-width:640px;margin:6px 0 30px}
+.hero .ctas{display:flex;gap:12px;flex-wrap:wrap}
+.trustline{display:flex;align-items:center;gap:11px;margin-top:48px;padding-top:22px;border-top:1px solid var(--line);color:var(--ink-soft);font-size:14.5px;max-width:840px}
+
+.band{background:var(--deep);color:#EAF3EC;text-align:center;padding:40px 24px;font-family:var(--serif);font-style:italic;font-size:23px;line-height:1.5}
+.band b{color:#fff;font-weight:600}
+
+.inv{padding:84px 0}
+.engine-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);padding:20px 26px;box-shadow:var(--shadow);margin:40px 0 22px}
+.engine-bar .lbl{font-family:var(--serif);font-weight:600;font-size:20px}
+.engine-bar .hint{font-size:14px;color:var(--ink-faint);margin-top:2px}
+.switch{position:relative;width:74px;height:38px;border-radius:999px;background:#D9DDD6;border:none;cursor:pointer;transition:background .3s;flex:none}
+.switch::after{content:"";position:absolute;top:4px;left:4px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:transform .3s}
+.switch[aria-pressed="true"]{background:var(--green)}
+.switch[aria-pressed="true"]::after{transform:translateX(36px)}
+.inv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.inv-card{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:20px;box-shadow:var(--shadow-sm);transition:border-color .3s}
+.inv-card b{display:block;font-weight:800;font-size:15.5px;margin:10px 0 5px}
+.inv-card p{color:var(--ink-soft);font-size:14px;line-height:1.55;margin:0}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:4px 11px;background:var(--sun-soft);color:#9A7720;transition:.3s}
+.engine-on .status{background:var(--green-soft);color:var(--deep)}
+.engine-on .inv-card{border-color:#CBE3DD}
+.status .dot{width:7px;height:7px;border-radius:50%;background:#D7A33F;transition:.3s}
+.engine-on .status .dot{background:var(--green)}
+.inv-note{font-size:14px;color:var(--ink-faint);margin-top:18px;line-height:1.6}
+
+.demo{padding:76px 0}
+.demo.alt{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.demo-head{max-width:740px;margin-bottom:36px}
+.stage{max-width:840px}
+
+.kindtoggle{display:inline-flex;background:var(--cream);border:1.5px solid var(--line);border-radius:999px;padding:4px;margin-bottom:16px}
+.kindbtn{font-weight:700;font-size:14.5px;border:none;background:none;color:var(--ink-soft);padding:8px 20px;border-radius:999px;cursor:pointer;transition:.15s}
+.kindbtn.active{background:var(--sage);color:#fff;box-shadow:var(--shadow-sm)}
+.searchbox{position:relative}
+.searchbox textarea{width:100%;font-family:var(--sans);font-size:16.5px;font-weight:500;color:var(--ink);background:var(--cream);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:15px 54px 15px 16px;min-height:92px;resize:vertical}
+.searchbox textarea:focus{outline:none;border-color:var(--green);background:#fff;box-shadow:0 0 0 4px var(--green-soft)}
+.micbtn{position:absolute;right:12px;bottom:14px;width:38px;height:38px;border-radius:50%;border:1.5px solid var(--line);background:#fff;display:grid;place-items:center;font-size:15px}
+.try-row{display:flex;flex-wrap:wrap;gap:9px;margin:15px 0 16px;align-items:center}
+.try-label{font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);margin-right:2px}
+.chip{font-size:14px;font-weight:600;cursor:pointer;background:var(--cream);border:1.5px solid var(--line);color:var(--ink-soft);border-radius:999px;padding:8px 15px;transition:.12s;text-align:left}
+.chip:hover{border-color:var(--green);color:var(--deep)}
+.chip.crisis-chip{border-style:dashed}
+.understood{display:none;background:var(--green-soft);border:1px solid #cfe2dc;border-radius:var(--radius-sm);padding:14px 18px;margin:20px 0 4px;font-size:15px;color:var(--deep)}
+.understood .u-label{font-weight:800;margin-right:6px}
+.facet{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #CBE3DD;border-radius:999px;padding:4px 6px 4px 13px;font-weight:700;font-size:13.5px;color:var(--deep);margin:3px 4px 3px 0}
+.facet button{border:none;background:var(--green-soft);color:var(--deep);width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:800;cursor:pointer;line-height:1}
+.facet button:hover{background:var(--green);color:#fff}
+.understood .fixline{display:block;margin-top:7px;font-size:13px;color:var(--ink-faint)}
+.count-line{display:none;font-family:var(--serif);font-size:19px;color:var(--ink);margin:18px 0 14px}
+.results{display:grid;gap:18px}
+.skel{display:none}
+.skel .sk-card{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);padding:26px;margin-top:14px}
+.sk-line{height:14px;border-radius:7px;background:linear-gradient(90deg,var(--cream) 25%,#efeee7 37%,var(--cream) 63%);background-size:400% 100%;animation:shimmer 1.2s infinite;margin-bottom:12px}
+@keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+.result-card{opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .45s ease}
+.result-card.show{opacity:1;transform:none}
+.result-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.result-name{font-family:var(--serif);font-weight:600;font-size:22px;line-height:1.15;margin:0}
+.result-loc{color:var(--ink-faint);font-size:14px;margin-top:3px}
+.verified-inline{color:var(--sage);font-weight:800;font-size:13px;white-space:nowrap}
+.passed-pill{margin-top:10px;display:inline-block;background:var(--sage-soft);color:var(--sage);font-weight:700;font-size:13px;padding:4px 12px;border-radius:999px}
+.like-you{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0 8px;font-size:13px;font-weight:700;color:#9A7720;background:var(--sun-soft);border:1.5px solid #ECD9A6;border-radius:999px;padding:4px 12px}
+.section-label{font-weight:800;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);margin:17px 0 8px}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-size:13.5px;font-weight:600;border-radius:999px;padding:6px 12px;border:1.5px solid var(--line);background:var(--cream);color:var(--ink-soft)}
+.tag.shared{background:var(--sage-soft);border-color:#CBE3DD;color:var(--ink);font-weight:700}
+.tag .freq{color:var(--ink-faint);font-size:12px}
+.keystone{font-family:var(--serif);font-size:18px;line-height:1.55;color:var(--ink);border-left:3px solid var(--sun);padding:4px 0 4px 18px;margin:15px 0 4px}
+.keystone .by{display:block;font-family:var(--sans);font-size:12.5px;color:var(--ink-faint);margin-top:8px}
+.whymatch{background:linear-gradient(180deg,var(--sun-soft),#fff);border:1px solid #F0E0BA;border-radius:var(--radius-sm);padding:12px 16px;margin-top:13px;font-size:14.5px;line-height:1.55}
+.whymatch b{color:#9A7720;font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:4px}
+.reach-link{display:inline-flex;align-items:center;gap:7px;margin-top:15px;font-weight:700;font-size:14.5px;color:var(--sage);text-decoration:none;border:1.5px solid #CBE3DD;background:var(--sage-soft);border-radius:999px;padding:9px 16px}
+.crisis-card{display:none;background:#FCEFEA;border:1.5px solid #F3D6C9;border-radius:var(--radius);padding:24px;margin-top:22px;color:#7A4636;font-size:15.5px;line-height:1.65}
+.crisis-card b{color:var(--deep);font-family:var(--serif);font-size:19px;display:block;margin-bottom:8px}
+.crisis-card .call{display:inline-block;margin-top:12px;background:#fff;border:1.5px solid #F3D6C9;border-radius:999px;padding:9px 18px;font-weight:800;color:#7A4636;text-decoration:none}
+.demo-note{color:var(--ink-faint);font-size:13px;margin-top:18px;line-height:1.55}
+
+.ks-field{background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px 28px}
+.ks-field>label{font-family:var(--serif);font-weight:600;font-size:23px;line-height:1.15;color:var(--deep);margin:0 0 8px;display:block}
+.ks-desc{font-size:15px;line-height:1.6;color:var(--ink-soft);margin:0 0 14px}
+.ks-field textarea{width:100%;min-height:145px;font-family:var(--sans);font-size:15.5px;line-height:1.6;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;resize:vertical}
+.privacy-note{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-faint);margin:10px 0 0}
+.behind{display:none;margin-top:24px}
+.behind-step{opacity:0;transform:translateY(8px);transition:opacity .5s ease,transform .5s ease;background:var(--cream);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:12px}
+.behind-step.show{opacity:1;transform:none}
+.behind-step b{display:block;font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--sage);margin-bottom:7px}
+.behind-step .redact{background:var(--sun-soft);border-radius:6px;padding:1px 7px;text-decoration:line-through;color:#9A7720}
+.behind-step .becomes{color:var(--deep);font-weight:700}
+.pub-line{display:none;font-family:var(--serif);font-style:italic;font-size:17.5px;color:var(--deep);margin-top:8px}
+
+.opts{padding:84px 0}
+.opts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:38px}
+.opt-card{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:20px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;transition:border-color .2s}
+.opt-card.core{border-color:#CBE3DD;background:linear-gradient(180deg,#fff, #FBFDFC)}
+.opt-card.picked{border-color:var(--green)}
+.opt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.opt-card b{font-weight:800;font-size:15.5px;line-height:1.35}
+.opt-card p{color:var(--ink-soft);font-size:13.5px;line-height:1.55;margin:0;flex:1}
+.opt-meta{font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint)}
+.core-flag{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--deep);background:var(--green-soft);border-radius:999px;padding:4px 10px;white-space:nowrap}
+.opt-switch{position:relative;width:46px;height:26px;border-radius:999px;background:#D9DDD6;border:none;cursor:pointer;transition:background .25s;flex:none}
+.opt-switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .25s}
+.opt-switch[aria-pressed="true"]{background:var(--green)}
+.opt-switch[aria-pressed="true"]::after{transform:translateX(20px)}
+.scope-bar{position:sticky;bottom:18px;margin-top:26px;background:var(--deep);color:#EAF3EC;border-radius:999px;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;box-shadow:0 14px 40px rgba(30,60,45,.28)}
+.scope-bar b{color:#fff}
+.scope-bar .est{font-family:var(--serif);font-style:italic;font-size:17px;color:#BFE0CD}
+
+.trust-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+.trust-card{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow-sm)}
+.trust-card .ic{width:48px;height:48px;border-radius:14px;background:var(--green-soft);display:grid;place-items:center;font-size:21px;margin-bottom:15px}
+.trust-card b{display:block;font-family:var(--serif);font-weight:600;font-size:19px;margin-bottom:8px}
+.trust-card p{color:var(--ink-soft);font-size:14.5px;line-height:1.6;margin:0}
+
+.quiet-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;max-width:940px;margin:42px auto 0}
+.quiet-col{text-align:center}
+.quiet-col .big{font-family:var(--serif);font-weight:500;font-size:34px;color:var(--deep);margin-bottom:6px}
+.quiet-col b{display:block;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:5px}
+.quiet-col span{display:block;color:var(--ink-soft);font-size:14.5px;line-height:1.55}
+
+.chapters{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+.chapter{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow-sm)}
+.chapter .num{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--sage);letter-spacing:.06em;text-transform:uppercase}
+.chapter .when{font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);margin:8px 0 6px}
+.chapter b{display:block;font-family:var(--serif);font-weight:600;font-size:20px;margin-bottom:8px}
+.chapter p{color:var(--ink-soft);font-size:14.5px;line-height:1.6;margin:0}
+
+.closing{background:var(--deep);color:#EAF3EC;text-align:center;padding:92px 32px}
+.closing h2{font-family:var(--serif);font-weight:500;font-size:42px;line-height:1.12;color:#fff;margin:0 0 14px}
+.closing h2 em{color:#BFE0CD}
+.closing p{font-size:17.5px;line-height:1.65;color:#CFE3D6;max-width:620px;margin:0 auto 28px}
+.closing .ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+.foot{border-top:1px solid var(--line);background:#fff}
+.foot-in{max-width:1080px;margin:0 auto;padding:26px 32px;color:var(--ink-faint);font-size:12.5px;line-height:1.6}
+
+@media(max-width:900px){
+  .hero h1{font-size:38px}
+  .section-h{font-size:30px}
+  .inv-grid,.opts-grid,.trust-cards,.quiet-cols,.chapters{grid-template-columns:1fr 1fr}
+  .band{font-size:19px}
+  .closing h2{font-size:29px}
+}
+@media(max-width:600px){
+  .in{padding:0 20px}
+  .nav-in{padding:12px 20px}
+  .hero{padding:48px 0 20px}
+  .hero h1{font-size:31px}
+  .inv-grid,.opts-grid,.trust-cards,.quiet-cols,.chapters{grid-template-columns:1fr}
+  .ks-field{padding:20px 18px}
+  .scope-bar{border-radius:var(--radius-sm)}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= NAV ======================= -->
+<header class="nav">
+  <div class="nav-in">
+    <a class="logo" href="#top">
+      <svg class="mark" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+        <circle cx="17" cy="17" r="15.5" stroke="#3F8268" stroke-width="2.4"/>
+        <path d="M17 24s-6.4-4-6.4-8.4A3.5 3.5 0 0 1 17 12.6a3.5 3.5 0 0 1 6.4 3c0 4.4-6.4 8.4-6.4 8.4z" fill="#3F8268"/>
+      </svg>
+      <span class="word">Pass Along</span>
+    </a>
+    <span class="ver-pill">MVP 1.2 · Concept build</span>
+    <nav>
+      <a href="#inventory">What&rsquo;s ready</a>
+      <a href="#find-demo">Find</a>
+      <a href="#pass-demo">Pass</a>
+      <a href="#options">Options</a>
+      <a href="#roadmap">Rounds 6&ndash;8</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ======================= HERO ======================= -->
+<section class="hero" id="top">
+  <div class="in">
+    <div class="eyebrow">From MVP 1.1 to MVP 1.2 &middot; The intelligence release</div>
+    <h1>Round 5 perfected the surface. <em>Round 6 turns the engine on.</em></h1>
+    <p class="sub">The current build already speaks the language of intelligence &mdash; an <b>&ldquo;Understood&rdquo;</b> line, a <b>&ldquo;people like you&rdquo;</b> badge, <b>&ldquo;see similar,&rdquo;</b> a <b>Verified</b> mark. The design work is done, and it&rsquo;s good. What ships next is the machinery that makes every one of those promises literally true &mdash; with zero visible redesign.</p>
+    <p class="posn">Nothing on this page replaces the product. It powers it.</p>
+    <div class="ctas">
+      <a class="btn" href="#find-demo">Run the Find experience</a>
+      <a class="btn ghost" href="#inventory">See what&rsquo;s already built</a>
+    </div>
+    <div class="trustline">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7-2.2c0 4.8-7 9.2-7 9.2z" fill="#4E8E86"/></svg>
+      Interactive concept with fictional sample data &mdash; a working sketch to react to, not a finished product.
+    </div>
+  </div>
+</section>
+
+<div class="band">&ldquo;Tell us what&rsquo;s going on in your own words.&rdquo; <b>The whole release is making that sentence do what it says.</b></div>
+
+<!-- ======================= INVENTORY ======================= -->
+<section class="inv" id="inventory">
+  <div class="in">
+    <div class="eyebrow">Found in the current build</div>
+    <h2 class="section-h">Six features are already designed. <em>They&rsquo;re waiting on an engine.</em></h2>
+    <p class="section-sub">A close read of the shipped MVP 1.1 shows the hard product thinking is done &mdash; these components exist in the codebase today, styled and placed. Flip the switch to see what changes in 1.2: not the design, just the truth behind it.</p>
+
+    <div class="engine-bar">
+      <div>
+        <div class="lbl">The intelligence layer</div>
+        <div class="hint">One engine underneath all six &mdash; flip it.</div>
+      </div>
+      <button class="switch" id="engineSwitch" aria-pressed="false" aria-label="Toggle the intelligence layer"></button>
+    </div>
+
+    <div class="inv-grid" id="invGrid">
+      <div class="inv-card"><span class="status"><span class="dot"></span><span class="st-txt">Designed &middot; awaiting engine</span></span><b>The &ldquo;Understood&rdquo; line</b><p><span class="mono">.understood</span> exists in the build. In 1.2 it reflects what the search actually comprehended &mdash; issues, who it&rsquo;s for, what matters &mdash; and can be corrected with a tap.</p></div>
+      <div class="inv-card"><span class="status"><span class="dot"></span><span class="st-txt">Designed &middot; awaiting engine</span></span><b>&ldquo;People like you&rdquo;</b><p><span class="mono">.like-you</span> is styled and placed. In 1.2 it appears only when the stories behind a provider genuinely resemble the searcher&rsquo;s situation &mdash; earned, not decorative.</p></div>
+      <div class="inv-card"><span class="status"><span class="dot"></span><span class="st-txt">Designed &middot; awaiting engine</span></span><b>The Verified badge</b><p><span class="mono">.verified-inline</span> renders today. In 1.2 it&rsquo;s backed by a dated state-license check and periodic &ldquo;still accepting?&rdquo; confirmations &mdash; a badge with receipts.</p></div>
+      <div class="inv-card"><span class="status"><span class="dot"></span><span class="st-txt">Designed &middot; awaiting engine</span></span><b>&ldquo;See similar&rdquo;</b><p><span class="mono">.sim-block</span> is in the stylesheet. In 1.2 the alternatives are picked by real similarity across the whole corpus of stories &mdash; not category matching.</p></div>
+      <div class="inv-card"><span class="status"><span class="dot"></span><span class="st-txt">Designed &middot; awaiting engine</span></span><b>Tags with frequencies</b><p><span class="mono">.tag .freq</span> anticipates counted themes. In 1.2 every count is computed from the stories themselves &mdash; &ldquo;Grief &times;5&rdquo; because five people said so.</p></div>
+      <div class="inv-card"><span class="status"><span class="dot"></span><span class="st-txt">Designed &middot; awaiting engine</span></span><b>The keystone story</b><p>The Round 5 keystone field is the best-designed intake in the category. In 1.2 each story is quietly protected, understood, and made findable the moment it&rsquo;s passed along.</p></div>
+    </div>
+    <p class="inv-note">This is the cheapest kind of roadmap there is: the UI contract already shipped. MVP 1.2 honors it.</p>
+  </div>
+</section>
+
+<!-- ======================= FIND DEMO ======================= -->
+<section class="demo alt" id="find-demo">
+  <div class="in">
+    <div class="demo-head">
+      <div class="eyebrow">Find &middot; Interactive concept</div>
+      <h2 class="section-h">Someone types the hardest sentence of their week. <em>The product actually hears it.</em></h2>
+      <p class="section-sub">Search boxes match words. This one understands meaning &mdash; and answers only with real stories from real people, in their own words. Try a sample, then tap an &times; in the &ldquo;We heard&rdquo; line to correct it and watch the results adapt.</p>
+    </div>
+    <div class="stage">
+      <div class="panel">
+        <div class="kindtoggle" role="group" aria-label="Looking for">
+          <button class="kindbtn active">Therapist</button>
+          <button class="kindbtn">Treatment center</button>
+        </div>
+        <div class="searchbox">
+          <textarea id="findText" placeholder="Tell us what&rsquo;s going on, in your own words&hellip;"></textarea>
+          <span class="micbtn" title="Voice input — already in the 1.1 design">&#127908;</span>
+        </div>
+        <div class="try-row">
+          <span class="try-label">Try:</span>
+          <button class="chip" data-demo="teen">My 15-year-old is anxious and shutting us out&hellip;</button>
+          <button class="chip" data-demo="grief">I lost my husband in March and I&rsquo;m not okay</button>
+          <button class="chip crisis-chip" data-demo="crisis">How it responds when someone is struggling to keep going</button>
+        </div>
+        <button class="btn" id="findBtn">Find help</button>
+
+        <div class="understood" id="understood"></div>
+        <div class="skel" id="skel">
+          <div class="sk-card"><div class="sk-line" style="width:45%"></div><div class="sk-line" style="width:70%"></div><div class="sk-line" style="width:58%"></div></div>
+        </div>
+        <div class="count-line" id="countLine"></div>
+        <div class="results" id="results"></div>
+        <div class="crisis-card" id="crisisCard">
+          <b>Before anything else &mdash; we&rsquo;re glad you told us.</b>
+          What you wrote sounds heavy, and you deserve support right now, not search results. If you&rsquo;re in crisis or thinking about harming yourself, please reach out &mdash; someone is there around the clock.
+          <br><a class="call" href="tel:988">Call or text 988 &mdash; Suicide &amp; Crisis Lifeline</a>
+          <br><br>When you&rsquo;re ready, Pass Along will still be here, and so will the recommendations.
+        </div>
+        <p class="demo-note">Sample data &mdash; providers and quotes are fictional. In production: every result comes from an actual passed-along story, every &ldquo;why this fits&rdquo; line quotes the recommender rather than an algorithm&rsquo;s opinion, and what a person types is read once, helped with, and never stored. Three independent safety checks run before anything else &mdash; tuned so the one unacceptable failure is missing someone in crisis.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PASS DEMO ======================= -->
+<section class="demo" id="pass-demo">
+  <div class="in">
+    <div class="demo-head">
+      <div class="eyebrow">Pass &middot; Interactive concept</div>
+      <h2 class="section-h">One minute of gratitude becomes <em>infrastructure.</em></h2>
+      <p class="section-sub">The Round 5 keystone field already coaxes out beautiful stories. In 1.2, the moment one is passed along, three invisible things happen &mdash; each protecting either the storyteller, the searcher, or the platform&rsquo;s word.</p>
+    </div>
+    <div class="stage">
+      <div class="ks-field">
+        <label>Why do you recommend them?</label>
+        <p class="ks-desc">A sample story is prefilled. Press the button to watch what happens the instant it&rsquo;s submitted.</p>
+        <textarea id="passText">Dr. Reyes saw me after my coworker Sarah told me about her. I went in for grief after losing my mom and honestly expected to quit after two sessions like last time. She was warm but didn't let me hide. She does EMDR which I'd never tried. She takes Aetna and always started on time. A year later I can talk about my mom without falling apart.</textarea>
+        <div class="privacy-note">&#128274; Anonymous, as always. No account, no name.</div>
+        <div style="margin-top:18px"><button class="btn" id="passBtn">Pass it along &mdash; and look behind the curtain</button></div>
+
+        <div class="behind" id="behind">
+          <div class="behind-step">
+            <b>1 &middot; The storyteller is protected first</b>
+            &ldquo;&hellip;after my coworker <span class="redact">Sarah</span> <span class="becomes">a friend</span> told me about her.&rdquo; Names, workplaces, and identifying details are removed automatically &mdash; and a human reviews anything the system isn&rsquo;t sure about. The anonymity promise, enforced by machinery.
+          </div>
+          <div class="behind-step">
+            <b>2 &middot; Everything the story teaches is heard</b>
+            <div class="tags" style="margin-top:4px">
+              <span class="tag shared">Grief &amp; loss</span><span class="tag shared">EMDR</span><span class="tag shared">Warm, but direct</span><span class="tag">Takes Aetna</span><span class="tag">Reliable &amp; on time</span><span class="tag">Stayed ~1 year</span>
+            </div>
+            <div style="margin-top:10px;font-size:13.5px;color:var(--ink-soft)">The story stays whole and human. These quiet labels are how the right stranger finds it later &mdash; and where the tag counts on every card come from.</div>
+          </div>
+          <div class="behind-step">
+            <b>3 &middot; The badge earns its meaning</b>
+            The provider&rsquo;s license is checked against the state board, and every so often the recommender gets one kind, anonymous question &mdash; <em>&ldquo;still seeing them? still taking new clients?&rdquo;</em> &mdash; so Verified never goes stale the way the big directories famously have.
+          </div>
+          <p class="pub-line" id="pubLine">&hellip;and one person&rsquo;s gratitude is now findable by the next person who needs it. &#10035;</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= OPTIONS ======================= -->
+<section class="opts alt" id="options" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="in">
+    <div class="eyebrow">Scoping MVP 1.2</div>
+    <h2 class="section-h">A core that keeps the promise, <em>and options that compound it.</em></h2>
+    <p class="section-sub">The core is non-negotiable: understanding, matching, safety, and true verification. Everything else is modular &mdash; toggle options to sketch a release scope. Each is small, independently shippable, and none requires touching the design language.</p>
+
+    <div class="opts-grid" id="optsGrid">
+      <div class="opt-card core"><div class="opt-top"><b>Understanding &amp; matching</b><span class="core-flag">Core</span></div><p>Free-text search that comprehends, matches against real stories, and explains each result in the recommender&rsquo;s own words.</p><span class="opt-meta">Round 6&ndash;7</span></div>
+      <div class="opt-card core"><div class="opt-top"><b>The safety net</b><span class="core-flag">Core</span></div><p>Three independent crisis checks on every message, support-first response, 988 always. Ships before anything public does.</p><span class="opt-meta">Round 6</span></div>
+      <div class="opt-card core"><div class="opt-top"><b>True verification</b><span class="core-flag">Core</span></div><p>License checks against state boards behind every Verified badge, with dated receipts. The anti-ghost-network position.</p><span class="opt-meta">Round 7</span></div>
+
+      <div class="opt-card" data-weeks="1"><div class="opt-top"><b>Freshness check-ins</b><button class="opt-switch" aria-pressed="false" aria-label="Toggle freshness check-ins"></button></div><p>One anonymous, one-tap question to recommenders each quarter &mdash; &ldquo;still seeing them?&rdquo; &mdash; so recommendations never quietly rot.</p><span class="opt-meta">+1 week &middot; Round 8</span></div>
+      <div class="opt-card" data-weeks="2"><div class="opt-top"><b>Community pages</b><button class="opt-switch" aria-pressed="false" aria-label="Toggle community pages"></button></div><p>&ldquo;What helped people with X in Y&rdquo; &mdash; auto-drafted from story quotes once enough cluster, human-approved, built for search discovery.</p><span class="opt-meta">+2 weeks &middot; Round 8</span></div>
+      <div class="opt-card" data-weeks="1"><div class="opt-top"><b>Coverage digest</b><button class="opt-switch" aria-pressed="false" aria-label="Toggle coverage digest"></button></div><p>A weekly note: what people searched for that the corpus couldn&rsquo;t yet answer &mdash; outreach aimed exactly where demand already is.</p><span class="opt-meta">+1 week &middot; Round 8</span></div>
+      <div class="opt-card" data-weeks="1"><div class="opt-top"><b>Share cards</b><button class="opt-switch" aria-pressed="false" aria-label="Toggle share cards"></button></div><p>Every story gets a beautiful, anonymous card made for the group chats and community threads where recommendations already travel.</p><span class="opt-meta">+1 week &middot; Round 8</span></div>
+      <div class="opt-card" data-weeks="1"><div class="opt-top"><b>One gentle follow-up</b><button class="opt-switch" aria-pressed="false" aria-label="Toggle guided follow-up"></button></div><p>When a story is thin, the keystone field asks exactly one warm clarifying question &mdash; never an interrogation. Measurably richer stories.</p><span class="opt-meta">+1 week &middot; Round 7</span></div>
+      <div class="opt-card" data-weeks="1"><div class="opt-top"><b>Ops copilot</b><button class="opt-switch" aria-pressed="false" aria-label="Toggle ops copilot"></button></div><p>A private assistant view for running the platform in plain English: &ldquo;this week&rsquo;s flagged stories,&rdquo; &ldquo;where demand beats coverage.&rdquo; One person runs it all.</p><span class="opt-meta">+1 week &middot; Round 8</span></div>
+    </div>
+
+    <div class="scope-bar" id="scopeBar">
+      <div><b id="scopeCount">Core + 0 options</b> &middot; zero redesign &middot; same brand, same voice</div>
+      <div class="est" id="scopeEst">&asymp; 9 weeks to a powered product</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= TRUST ======================= -->
+<section class="demo" id="trust">
+  <div class="in">
+    <div class="demo-head">
+      <div class="eyebrow">Non-negotiables</div>
+      <h2 class="section-h">Careful by design, because <em>this is mental health.</em></h2>
+    </div>
+    <div class="trust-cards">
+      <div class="trust-card"><div class="ic">&#128735;</div><b>Support before search</b><p>Every message passes three independent safety checks tuned so the one unacceptable failure is a miss. Anyone struggling sees warmth and 988 first &mdash; always, on both flows.</p></div>
+      <div class="trust-card"><div class="ic">&#128274;</div><b>Privacy beyond the law</b><p>What people type while looking for help is read once and never stored, logged, or sold. No ad trackers on sensitive pages. Built to a stricter standard than regulation currently demands &mdash; because the standard is coming.</p></div>
+      <div class="trust-card"><div class="ic">&#127807;</div><b>Search help, never advice</b><p>The engine only surfaces what the community said. It never assesses, diagnoses, or recommends treatment &mdash; which keeps the product warm, honest, and cleanly on the right side of the new wave of AI-and-mental-health laws.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= QUIET ENGINE ======================= -->
+<section class="demo alt" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="in" style="text-align:center">
+    <div class="eyebrow" style="text-align:center">Operating reality</div>
+    <h2 class="section-h" style="margin-left:auto;margin-right:auto">A quiet engine, <em>not a big machine</em></h2>
+    <div class="quiet-cols">
+      <div class="quiet-col"><div class="big">~$100</div><b>a month to run</b><span>At many times current traffic. No servers to babysit, no ML team to hire, nothing exotic to maintain.</span></div>
+      <div class="quiet-col"><div class="big">0</div><b>visible redesigns</b><span>Every feature lands inside components that already shipped in MVP 1.1. The brand, voice, and layout stay exactly as designed.</span></div>
+      <div class="quiet-col"><div class="big">1</div><b>person can run it</b><span>Automation drafts, a human decides. Flagged stories, coverage gaps, and weekly numbers arrive as plain-English summaries.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= ROADMAP ======================= -->
+<section class="demo" id="roadmap">
+  <div class="in">
+    <div class="demo-head">
+      <div class="eyebrow">The plan, in the build&rsquo;s own vocabulary</div>
+      <h2 class="section-h">Rounds 6, 7, and 8 &mdash; <em>ninety days</em></h2>
+      <p class="section-sub">The stylesheet says Round 5 just shipped. Here&rsquo;s what the next three look like: small, safe, each visibly better than the last, none a rebuild.</p>
+    </div>
+    <div class="chapters">
+      <div class="chapter"><span class="num">Round 6</span><div class="when">Weeks 1&ndash;4</div><b>The engine room</b><p>Stories move into a proper home, the safety net goes live, and nothing visible changes. Boring on purpose &mdash; the foundation every promise stands on.</p></div>
+      <div class="chapter"><span class="num">Round 7</span><div class="when">Weeks 5&ndash;9</div><b>The promise, kept</b><p>&ldquo;In your own words&rdquo; becomes real: understanding, matching, the sun-colored &ldquo;why this fits,&rdquo; and stories enriched the moment they&rsquo;re passed along.</p></div>
+      <div class="chapter"><span class="num">Round 8</span><div class="when">Weeks 10&ndash;13</div><b>Compounding trust</b><p>Verified badges with receipts, freshness check-ins, community pages, the coverage digest &mdash; the loops that make the corpus grow itself.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= CLOSING ======================= -->
+<section class="closing">
+  <h2>The hard part &mdash; the heart, the voice, the design &mdash; <em>already shipped.</em></h2>
+  <p>MVP 1.2 is the engine that product deserves: understanding under the search box, receipts under the badges, machinery under the anonymity promise. Same site. True this time.</p>
+  <div class="ctas">
+    <a class="btn on-deep" href="#find-demo">Run the demo again</a>
+    <a class="btn ghost on-deep" href="#options">Sketch a scope</a>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="foot-in">
+    <b>About this document:</b> an independent interactive concept exploring an intelligence layer for Pass Along &mdash; not affiliated with or published by trypassalong.com. All providers, stories, quotes, and figures are fictional sample data. The design intentionally extends the live site&rsquo;s existing system (MVP 1.1 / Round 5) to demonstrate that everything proposed ships inside the brand as designed. A companion technical specification covers implementation.
+  </div>
+</footer>
+
+<script>
+(function(){
+  var engineSwitch = document.getElementById('engineSwitch');
+  var invGrid = document.getElementById('invGrid');
+  engineSwitch.addEventListener('click', function(){
+    var on = engineSwitch.getAttribute('aria-pressed') === 'true';
+    engineSwitch.setAttribute('aria-pressed', String(!on));
+    invGrid.classList.toggle('engine-on', !on);
+    invGrid.querySelectorAll('.st-txt').forEach(function(el){
+      el.textContent = !on ? 'Powered · MVP 1.2' : 'Designed · awaiting engine';
+    });
+  });
+
+  document.querySelectorAll('.kindbtn').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.kindbtn').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+    });
+  });
+
+  var demos = {
+    teen: {
+      query: "My 15-year-old daughter is anxious and shutting us out. She won't talk to us and her grades are slipping. We're in Austin and honestly don't know where to start.",
+      facets: ["Teen anxiety","Family feeling shut out","Near Austin"],
+      count: "Two families passed along someone who helped with something like this.",
+      countAlt: "Updated — recalibrated around what matters most.",
+      results: [
+        {name:"Dr. Maya Reyes, LPC", loc:"Austin, TX · Telehealth available", passed:"♥ Passed along 4 times", like:"✳ From parents like you", tags:[["Teen anxiety","shared","×3"],["School stress","shared","×2"],["Family sessions","","×2"],["Warm, but direct","",""]], quote:"“She was the first person our daughter didn't shut out. Within a month we heard laughing from her room after sessions.”", by:"Passed along by a mom in Austin · 8 months in", why:"You mentioned your daughter is shutting you out — three of the four families who recommended Dr. Reyes said the same thing, in almost the same words."},
+        {name:"Cedar Hollow Counseling", loc:"Round Rock, TX · Group + individual", passed:"♥ Passed along 2 times", like:"", tags:[["Teen anxiety","shared","×2"],["Parent coaching","",""],["Sliding scale","",""]], quote:"“They worked with us as parents too, which nobody else offered. We stopped feeling like the problem.”", by:"Passed along by a dad nearby · 1 year in", why:"You said you don't know where to start — this center was recommended specifically for coaching parents through the first months."}
+      ]
+    },
+    grief: {
+      query: "I lost my husband in March and I'm not okay. Friends keep saying it takes time but I can't sleep and I can't focus at work. I think I need someone who gets grief.",
+      facets: ["Grief after losing a spouse","Sleep & focus struggles","Wants deep grief experience"],
+      count: "Two people passed along someone who helped them through loss.",
+      countAlt: "Updated — recalibrated around what matters most.",
+      results: [
+        {name:"Dr. Amara Sule, PhD", loc:"Telehealth · Licensed in TX", passed:"♥ Passed along 5 times", like:"✳ From people who've been there", tags:[["Grief & loss","shared","×5"],["Widowed","shared","×3"],["EMDR","","×2"],["Evening sessions","",""]], quote:"“I could say my wife's name in that room without everyone flinching. That alone was worth everything.”", by:"Passed along by a widower · 14 months in", why:"Three of the five people who recommended Dr. Sule lost a spouse — her whole practice is walking beside people exactly where you are."},
+        {name:"Stillwater Grief Collective", loc:"Austin, TX · Groups Tuesdays", passed:"♥ Passed along 3 times", like:"", tags:[["Grief & loss","shared","×3"],["Group support","",""],["No insurance needed","",""]], quote:"“The Tuesday group became the only place I didn't have to perform being fine.”", by:"Passed along anonymously · ongoing", why:"You mentioned friends who mean well but don't get it — every story about this group mentions the relief of being around people who simply do."}
+      ]
+    }
+  };
+
+  var findText = document.getElementById('findText');
+  var understood = document.getElementById('understood');
+  var skel = document.getElementById('skel');
+  var countLine = document.getElementById('countLine');
+  var results = document.getElementById('results');
+  var crisisCard = document.getElementById('crisisCard');
+  var current = null;
+  var removedFacet = false;
+
+  document.querySelectorAll('.chip[data-demo]').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      current = chip.getAttribute('data-demo');
+      removedFacet = false;
+      findText.value = current === 'crisis'
+        ? "Lately I don't really see the point in any of this anymore."
+        : demos[current].query;
+      run();
+    });
+  });
+  document.getElementById('findBtn').addEventListener('click', function(){
+    if(!current){ current='teen'; removedFacet=false; findText.value = demos.teen.query; }
+    run();
+  });
+
+  function reset(){
+    understood.style.display='none'; countLine.style.display='none';
+    results.innerHTML=''; crisisCard.style.display='none'; skel.style.display='none';
+  }
+
+  function renderUnderstood(d){
+    var html = '<span class="u-label">We heard:</span>';
+    d.facets.forEach(function(f, i){
+      if(removedFacet && i===1) return;
+      html += '<span class="facet">'+f+'<button data-fi="'+i+'" aria-label="Remove '+f+'">×</button></span>';
+    });
+    html += '<span class="fixline">Tap an × to correct us — the search adapts, and the correction makes the engine smarter.</span>';
+    understood.innerHTML = html;
+    understood.style.display='block';
+    understood.querySelectorAll('.facet button').forEach(function(b){
+      b.addEventListener('click', function(){
+        removedFacet = true;
+        renderUnderstood(d);
+        showResults(d, true);
+      });
+    });
+  }
+
+  function showResults(d, isUpdate){
+    results.innerHTML=''; countLine.style.display='none';
+    skel.style.display='block';
+    setTimeout(function(){
+      skel.style.display='none';
+      countLine.textContent = isUpdate ? d.countAlt : d.count;
+      countLine.style.display='block';
+      var list = isUpdate ? d.results.slice().reverse() : d.results;
+      list.forEach(function(r, i){
+        var card = document.createElement('div');
+        card.className='panel result-card';
+        var tagsHtml = r.tags.map(function(t){
+          return '<span class="tag '+t[1]+'">'+t[0]+(t[2]?' <span class="freq">'+t[2]+'</span>':'')+'</span>';
+        }).join('');
+        card.innerHTML =
+          '<div class="result-top"><div><h3 class="result-name">'+r.name+'</h3><div class="result-loc">'+r.loc+'</div></div>'+
+          '<span class="verified-inline">✓ Verified · checked this month</span></div>'+
+          '<span class="passed-pill">'+r.passed+'</span>'+(r.like?'<span class="like-you">'+r.like+'</span>':'')+
+          '<div class="section-label">What people talked about</div><div class="tags">'+tagsHtml+'</div>'+
+          '<div class="keystone">'+r.quote+'<span class="by">'+r.by+'</span></div>'+
+          '<div class="whymatch"><b>Why this might fit</b>'+r.why+'</div>'+
+          '<a class="reach-link" href="javascript:void(0)">Reach out →</a>';
+        results.appendChild(card);
+        setTimeout(function(){ card.classList.add('show'); }, 200 + i*320);
+      });
+      if(!isUpdate) countLine.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, isUpdate ? 650 : 900);
+  }
+
+  function run(){
+    reset();
+    if(current === 'crisis'){
+      skel.style.display='block';
+      setTimeout(function(){
+        skel.style.display='none';
+        crisisCard.style.display='block';
+        crisisCard.scrollIntoView({behavior:'smooth', block:'nearest'});
+      }, 500);
+      return;
+    }
+    var d = demos[current];
+    setTimeout(function(){ renderUnderstood(d); }, 300);
+    setTimeout(function(){ showResults(d, false); }, 700);
+  }
+
+  var passBtn = document.getElementById('passBtn');
+  var behind = document.getElementById('behind');
+  var pubLine = document.getElementById('pubLine');
+  passBtn.addEventListener('click', function(){
+    behind.style.display='block';
+    var steps = behind.querySelectorAll('.behind-step');
+    steps.forEach(function(s){ s.classList.remove('show'); });
+    pubLine.style.display='none';
+    steps.forEach(function(s,i){ setTimeout(function(){ s.classList.add('show'); }, 300 + i*650); });
+    setTimeout(function(){ pubLine.style.display='block'; }, 300 + steps.length*650 + 200);
+    setTimeout(function(){ behind.scrollIntoView({behavior:'smooth', block:'nearest'}); }, 350);
+  });
+
+  var baseWeeks = 9;
+  function refreshScope(){
+    var picked = document.querySelectorAll('.opt-card.picked');
+    var extra = 0;
+    picked.forEach(function(c){ extra += parseInt(c.getAttribute('data-weeks')||'0',10); });
+    document.getElementById('scopeCount').textContent = 'Core + ' + picked.length + ' option' + (picked.length===1?'':'s');
+    var lo = baseWeeks + Math.max(0, extra-1), hi = baseWeeks + extra + 1;
+    document.getElementById('scopeEst').textContent = '≈ ' + (extra===0 ? baseWeeks + ' weeks to a powered product' : lo + '–' + hi + ' weeks, options included');
+  }
+  document.querySelectorAll('.opt-switch').forEach(function(sw){
+    sw.addEventListener('click', function(){
+      var on = sw.getAttribute('aria-pressed')==='true';
+      sw.setAttribute('aria-pressed', String(!on));
+      sw.closest('.opt-card').classList.toggle('picked', !on);
+      refreshScope();
+    });
+  });
+  refreshScope();
+})();
+</script>
+</body>
+</html>
