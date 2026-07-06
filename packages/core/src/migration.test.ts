@@ -1,0 +1,106 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, test } from "vitest";
+
+const repoRoot = resolve(import.meta.dirname, "../../..");
+
+describe("initial migration privacy contract", () => {
+  test("queries stores query_hash and understood only", () => {
+    const sql = readFileSync(
+      resolve(repoRoot, "supabase/migrations/0001_init.sql"),
+      "utf8"
+    );
+    const queriesColumns = extractCreateTableColumns(sql, "queries");
+
+    expect(queriesColumns).toEqual(["query_hash", "understood"]);
+    expect(queriesColumns).not.toContain("raw_text");
+    expect(queriesColumns).not.toContain("raw_query");
+    expect(queriesColumns).not.toContain("query_text");
+  });
+});
+
+function extractCreateTableColumns(sql: string, tableName: string): string[] {
+  const searchable = stripSqlComments(sql);
+  const match = new RegExp(
+    `create\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?(?:public\\.)?${tableName}\\s*\\(`,
+    "iu"
+  ).exec(searchable);
+
+  if (!match) {
+    throw new Error(`create table statement not found for ${tableName}`);
+  }
+
+  const openParenIndex = match.index + match[0].lastIndexOf("(");
+  const closeParenIndex = findMatchingParen(searchable, openParenIndex);
+  const tableBody = searchable.slice(openParenIndex + 1, closeParenIndex);
+
+  return splitTopLevelCommas(tableBody)
+    .map((definition) => definition.trim())
+    .filter((definition) => definition.length > 0)
+    .filter((definition) => !/^(constraint|primary|foreign|unique|check)\b/iu.test(definition))
+    .map((definition) => {
+      const columnName = /^"([^"]+)"|^([a-z_][a-z0-9_]*)/iu.exec(definition);
+
+      if (!columnName) {
+        throw new Error(`unable to parse column definition: ${definition}`);
+      }
+
+      return columnName[1] ?? columnName[2] ?? "";
+    });
+}
+
+function findMatchingParen(text: string, openParenIndex: number): number {
+  let depth = 0;
+
+  for (let index = openParenIndex; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (character === "(") {
+      depth += 1;
+    }
+
+    if (character === ")") {
+      depth -= 1;
+    }
+
+    if (depth === 0) {
+      return index;
+    }
+  }
+
+  throw new Error("unterminated create table statement");
+}
+
+function splitTopLevelCommas(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (character === "(") {
+      depth += 1;
+    }
+
+    if (character === ")") {
+      depth -= 1;
+    }
+
+    if (character === "," && depth === 0) {
+      parts.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  parts.push(text.slice(start));
+  return parts;
+}
+
+function stripSqlComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//gu, (match) =>
+      "\n".repeat(match.split(/\r?\n/).length - 1)
+    )
+    .replace(/--.*$/gmu, "");
+}
