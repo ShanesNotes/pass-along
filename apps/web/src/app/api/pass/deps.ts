@@ -2,6 +2,7 @@ import {
   JOB_DEFINITIONS,
   createInMemoryJobStorage,
   createInlineJobRunner,
+  type EventsOutboxRow,
   type InMemoryJobStorage,
   type IntakeArtifactStoragePort,
   type IntakeRecommendationSource,
@@ -15,13 +16,18 @@ import type {
   EventCatalog,
   RecEnrichment,
   RecEnrichmentTag,
+  SubmissionAction,
   SubmissionState
 } from "../../../../../../packages/core/src/index";
-import type {
-  ExtractStoryResult,
-  ScoreQualityResult,
-  ScrubStoryResult
+import {
+  extractStory,
+  scoreQuality,
+  type PiiFinding,
+  type ExtractStoryResult,
+  type ScoreQualityResult,
+  type ScrubStoryResult
 } from "../../../../../../packages/engine/src/intake/index";
+import type { RetrievalDocument } from "../../../../../../packages/engine/src/retrieval/index";
 import { providers as fixtureProviders } from "../../../fixtures/providers";
 import type { Provider } from "../../../fixtures/types";
 
@@ -56,6 +62,62 @@ type StoredRecommendation = {
 
 type RestrictedOriginal = IntakeRecommendationSource & {
   readonly submittedAt: string;
+};
+
+export type AdminDecisionAction = "approve" | "reject" | "edit_scrub";
+
+export type AdminPiiFindingSpan = {
+  readonly start: number;
+  readonly end: number;
+  readonly kind: PiiFinding["kind"];
+  readonly replacement: string;
+  readonly label: string;
+};
+
+export type AdminReviewQueueItem = {
+  readonly id: string;
+  readonly status: "review_pending";
+  readonly provider: {
+    readonly id: string;
+    readonly name: string;
+    readonly credential: string;
+    readonly kind: Provider["kind"];
+    readonly metro: Provider["metro"];
+  };
+  readonly submitted_at: string;
+  readonly flag_reasons: readonly string[];
+  readonly raw_story: string;
+  readonly scrubbed_story: string;
+  readonly pii_findings: readonly AdminPiiFindingSpan[];
+  readonly tags: readonly RecEnrichmentTag[];
+  readonly quality: RecEnrichment["quality"] & {
+    readonly flags: readonly string[];
+  };
+  readonly sources: {
+    readonly scrub: ScrubStoryResult["source"];
+    readonly extract: ExtractStoryResult["source"];
+    readonly quality: ScoreQualityResult["source"];
+  };
+  readonly transitions: readonly {
+    readonly action: string;
+    readonly from: SubmissionState | null;
+    readonly to: SubmissionState;
+  }[];
+};
+
+export type AdminDecisionResult = {
+  readonly recommendation_id: string;
+  readonly action: AdminDecisionAction;
+  readonly status: SubmissionState;
+  readonly transition: {
+    readonly action: SubmissionAction;
+    readonly from: SubmissionState | null;
+    readonly to: SubmissionState;
+  };
+  readonly event: {
+    readonly id: string;
+    readonly type: "moderation.decided";
+  };
 };
 
 export type PassApiTag = RecEnrichmentTag;
@@ -100,6 +162,18 @@ export interface PassDemoStore
     IntakeArtifactStoragePort {
   hasProvider(providerId: string): boolean;
   createSubmission(input: PassRequestBody, now: Date): StoredRecommendation;
+  listAdminReviewQueue(): Promise<readonly AdminReviewQueueItem[]>;
+  decideAdminReview(input: {
+    readonly recommendationId: string;
+    readonly action: AdminDecisionAction;
+    readonly editedScrub?: string;
+    readonly reason?: string;
+    readonly reviewer: string;
+    readonly now: Date;
+  }): Promise<AdminDecisionResult>;
+  getRecommendationEmbeddingSource(
+    recommendationId: string
+  ): Promise<RetrievalDocument | undefined>;
   resultFor(recommendationId: string): Promise<PassApiSuccessResponse>;
   debugCounts(): Promise<{
     readonly originals: number;
@@ -180,7 +254,9 @@ export function createPassDemoStore(
   const base = createInMemoryJobStorage();
   let nextRecommendation = 1;
   let nextProvider = 1;
-  const providers = new Map(seedProviders.map((provider) => [provider.id, provider]));
+  const providers = new Map(
+    seedProviders.map((provider) => [provider.id, provider])
+  );
   const recommendationOriginals = new Map<string, RestrictedOriginal>();
   const recommendations = new Map<string, StoredRecommendation>();
   const scrubResults = new Map<string, ScrubStoryResult>();
@@ -265,6 +341,108 @@ export function createPassDemoStore(
       return qualityResults.get(recommendationId);
     },
 
+    async listAdminReviewQueue() {
+      const rows: AdminReviewQueueItem[] = [];
+
+      for (const recommendation of recommendations.values()) {
+        const state = await store.getRecommendationState(recommendation.id);
+
+        if (state !== "review_pending") {
+          continue;
+        }
+
+        const item = await adminQueueItemFor(recommendation);
+
+        if (item) {
+          rows.push(item);
+        }
+      }
+
+      return rows.sort((left, right) =>
+        left.submitted_at.localeCompare(right.submitted_at)
+      );
+    },
+
+    async decideAdminReview(input) {
+      const currentState = await store.getRecommendationState(
+        input.recommendationId
+      );
+
+      if (currentState === undefined) {
+        throw new Error(`Unknown recommendation ${input.recommendationId}`);
+      }
+
+      if (currentState !== "review_pending") {
+        throw new Error(
+          `Cannot decide recommendation ${input.recommendationId} from ${currentState}`
+        );
+      }
+
+      if (input.action === "edit_scrub") {
+        await applyEditedScrub(input.recommendationId, input.editedScrub);
+      }
+
+      const transitionAction = transitionActionForAdminDecision(input.action);
+      const transitionRow = await store.transitionRecommendation({
+        recommendationId: input.recommendationId,
+        action: transitionAction,
+        actor: input.reviewer,
+        ...(input.reason ? { reason: input.reason } : {}),
+        metadata: {
+          source: "admin_demo",
+          admin_action: input.action,
+          edited_scrub: input.action === "edit_scrub"
+        },
+        idempotencyKey: [
+          "admin_decide",
+          input.recommendationId,
+          transitionAction,
+          input.now.toISOString()
+        ].join(":"),
+        now: input.now
+      });
+      const eventAction = moderationEventActionForAdminDecision(input.action);
+      const moderationEvent = await appendModerationDecidedEvent({
+        recommendationId: input.recommendationId,
+        action: eventAction,
+        reviewer: input.reviewer,
+        transitionRow,
+        now: input.now
+      });
+
+      if (transitionRow.toState === "published") {
+        await store.appendEvent(
+          {
+            type: "submission.published",
+            payload: { recommendation_id: input.recommendationId }
+          },
+          {
+            idempotencyKey: `admin:${transitionRow.id}:submission.published`,
+            emittedAt: input.now
+          }
+        );
+      }
+
+      return {
+        recommendation_id: input.recommendationId,
+        action: input.action,
+        status: transitionRow.toState,
+        transition: {
+          action: transitionRow.action,
+          from: transitionRow.fromState,
+          to: transitionRow.toState
+        },
+        event: {
+          id: moderationEvent.id,
+          type: "moderation.decided"
+        }
+      };
+    },
+
+    async getRecommendationEmbeddingSource(recommendationId) {
+      return embeddingSourceFor(recommendationId);
+    },
+
     async resultFor(recommendationId) {
       const recommendation = recommendations.get(recommendationId);
       const state = await store.getRecommendationState(recommendationId);
@@ -312,6 +490,157 @@ export function createPassDemoStore(
     }
   };
 
+  async function adminQueueItemFor(
+    recommendation: StoredRecommendation
+  ): Promise<AdminReviewQueueItem | undefined> {
+    const original = recommendationOriginals.get(recommendation.id);
+    const provider = providers.get(recommendation.providerId);
+    const scrubResult = scrubResults.get(recommendation.id);
+    const extractResult = extractResults.get(recommendation.id);
+    const qualityResult = qualityResults.get(recommendation.id);
+
+    if (!original || !provider || !scrubResult || !extractResult || !qualityResult) {
+      return undefined;
+    }
+
+    return {
+      id: recommendation.id,
+      status: "review_pending",
+      provider: {
+        id: provider.id,
+        name: provider.name,
+        credential: provider.credential,
+        kind: provider.kind,
+        metro: provider.metro
+      },
+      submitted_at: recommendation.submittedAt,
+      flag_reasons: flagReasonsFor(scrubResult, qualityResult),
+      raw_story: original.story,
+      scrubbed_story: scrubResult.scrubbedStory,
+      pii_findings: piiSpansFor(scrubResult.piiFindings),
+      tags: extractResult.enrichment.tags,
+      quality: {
+        ...qualityResult.quality,
+        flags: qualityResult.flags
+      },
+      sources: {
+        scrub: scrubResult.source,
+        extract: extractResult.source,
+        quality: qualityResult.source
+      },
+      transitions: transitionRows(
+        await store.listModerationEvents(recommendation.id)
+      )
+    };
+  }
+
+  async function applyEditedScrub(
+    recommendationId: string,
+    editedScrub: string | undefined
+  ): Promise<void> {
+    const scrubbedStory = editedScrub?.trim();
+    const original = recommendationOriginals.get(recommendationId);
+    const existingScrub = scrubResults.get(recommendationId);
+
+    if (!scrubbedStory) {
+      throw new Error("editedScrub is required for edit_scrub");
+    }
+
+    if (!existingScrub) {
+      throw new Error(`Missing scrub result for ${recommendationId}`);
+    }
+
+    const nextScrubResult: ScrubStoryResult = {
+      ...existingScrub,
+      scrubbedStory
+    };
+    const nextExtractResult = await extractStory(
+      original
+        ? {
+            scrubbedStory,
+            forWhom: original.forWhom,
+            piiFindings: existingScrub.piiFindings
+          }
+        : {
+            scrubbedStory,
+            piiFindings: existingScrub.piiFindings
+          }
+    );
+    const nextQualityResult = scoreQuality({
+      scrubbedStory,
+      enrichment: nextExtractResult.enrichment
+    });
+
+    scrubResults.set(recommendationId, nextScrubResult);
+    extractResults.set(recommendationId, nextExtractResult);
+    qualityResults.set(recommendationId, nextQualityResult);
+  }
+
+  async function appendModerationDecidedEvent(input: {
+    readonly recommendationId: string;
+    readonly action: Extract<
+      EventCatalog,
+      { type: "moderation.decided" }
+    >["payload"]["action"];
+    readonly reviewer: string;
+    readonly transitionRow: ModerationEventRow;
+    readonly now: Date;
+  }): Promise<EventsOutboxRow<Extract<EventCatalog, { type: "moderation.decided" }>>> {
+    return store.appendEvent(
+      {
+        type: "moderation.decided",
+        payload: {
+          recommendation_id: input.recommendationId,
+          action: input.action,
+          reviewer: input.reviewer
+        }
+      },
+      {
+        idempotencyKey: `admin:${input.transitionRow.id}:moderation.decided`,
+        emittedAt: input.now
+      }
+    );
+  }
+
+  function embeddingSourceFor(
+    recommendationId: string
+  ): RetrievalDocument | undefined {
+    const recommendation = recommendations.get(recommendationId);
+    const scrubResult = scrubResults.get(recommendationId);
+    const extractResult = extractResults.get(recommendationId);
+    const provider = recommendation
+      ? providers.get(recommendation.providerId)
+      : undefined;
+
+    if (!recommendation || !provider || !scrubResult || !extractResult) {
+      return undefined;
+    }
+
+    const tags = extractResult.enrichment.tags.map((tag) => tag.value);
+    const keystone = extractResult.enrichment.keystone_quote.text;
+
+    return {
+      recommendationId,
+      providerId: provider.id,
+      providerName: provider.name,
+      credential: provider.credential,
+      loc: provider.metro,
+      kind: provider.kind,
+      tags,
+      keystone,
+      text: [
+        provider.name,
+        provider.credential,
+        provider.kind,
+        provider.metro,
+        tags.join(" "),
+        keystone,
+        scrubResult.scrubbedStory
+      ].join("\n"),
+      verified: provider.license.status === "verified"
+    };
+  }
+
   return store;
 }
 
@@ -345,6 +674,37 @@ function providerForInput(
 
   providers.set(provider.id, provider);
   return provider;
+}
+
+function flagReasonsFor(
+  scrubResult: ScrubStoryResult,
+  qualityResult: ScoreQualityResult
+): readonly string[] {
+  return [...new Set([...scrubResult.flags, ...qualityResult.flags])];
+}
+
+function piiSpansFor(
+  findings: readonly PiiFinding[]
+): readonly AdminPiiFindingSpan[] {
+  return findings.map((finding) => ({
+    start: finding.span[0],
+    end: finding.span[1],
+    kind: finding.kind,
+    replacement: finding.replacement,
+    label: `${finding.kind}: ${finding.replacement}`
+  }));
+}
+
+function transitionActionForAdminDecision(
+  action: AdminDecisionAction
+): SubmissionAction {
+  return action === "edit_scrub" ? "edit_approve" : action;
+}
+
+function moderationEventActionForAdminDecision(
+  action: AdminDecisionAction
+): Extract<EventCatalog, { type: "moderation.decided" }>["payload"]["action"] {
+  return action === "edit_scrub" ? "edit_approve" : action;
 }
 
 function transitionRows(rows: readonly ModerationEventRow[]) {
