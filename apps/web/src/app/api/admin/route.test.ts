@@ -31,6 +31,49 @@ const REVIEW_STORY =
   "Maria Chen helped my teen daughter with panic and anxiety using CBT bus practice steps in Denver. Afterward, my sister Julia joined us at 123 Pine Street on March 3 after I emailed julia@example.com and called 303-555-1212 about evening routines.";
 
 describe("admin review API", () => {
+  test("GET /api/admin/queue without a bearer token never exposes raw stories", async () => {
+    const harness = await createHarness();
+    await harness.submitReviewPending(REVIEW_STORY);
+    const response = await harness.getQueueWithoutToken();
+    const text = await response.text();
+
+    expect([401, 503]).toContain(response.status);
+    expect(text).not.toContain("raw_story");
+    expect(text).not.toContain(REVIEW_STORY);
+  });
+
+  test("GET /api/admin/queue returns ADMIN_DISABLED when the demo token is unset", async () => {
+    const harness = await createHarness();
+    await harness.submitReviewPending(REVIEW_STORY);
+    const queueHandler = createAdminQueueGetHandler({
+      store: harness.store,
+      env: { ...process.env, ADMIN_DEMO_TOKEN: undefined }
+    });
+    const response = await queueHandler(adminRequest());
+    const text = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(text).toContain("ADMIN_DISABLED");
+    expect(text).not.toContain("raw_story");
+    expect(text).not.toContain(REVIEW_STORY);
+  });
+
+  test("POST /api/admin/decide without a bearer token is rejected before moderation", async () => {
+    const harness = await createHarness();
+    const id = await harness.submitReviewPending(REVIEW_STORY);
+    const response = await harness.decideWithoutToken({
+      id,
+      action: "approve"
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(401);
+    expect(text).toContain("ADMIN_UNAUTHORIZED");
+    await expect(harness.store.getRecommendationState(id)).resolves.toBe(
+      "review_pending"
+    );
+  });
+
   test("GET /api/admin/queue returns review-pending shape with reviewer-only raw story", async () => {
     const harness = await createHarness();
     const passResponse = await harness.postPass(REVIEW_STORY);
@@ -169,9 +212,11 @@ async function createHarness() {
     now
   });
   const findDeps = await createFindDeps();
-  const queueHandler = createAdminQueueGetHandler({ store });
+  const adminEnv = { ...process.env, ADMIN_DEMO_TOKEN: "test-admin-token" };
+  const queueHandler = createAdminQueueGetHandler({ store, env: adminEnv });
   const decideHandler = createAdminDecidePostHandler({
     store,
+    env: adminEnv,
     now,
     reviewer: "test-reviewer",
     embedApprovedRecommendation: (recommendationId) =>
@@ -206,13 +251,34 @@ async function createHarness() {
       return body.recommendation_id;
     },
     async getQueue() {
-      return queueHandler();
+      return queueHandler(adminRequest());
+    },
+    async getQueueWithoutToken() {
+      return queueHandler(
+        new Request("http://localhost/api/admin/queue", {
+          method: "GET"
+        })
+      );
     },
     async decide(body: unknown) {
       return decideHandler(
         new Request("http://localhost/api/admin/decide", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "authorization": "Bearer test-admin-token",
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(body)
+        })
+      );
+    },
+    async decideWithoutToken(body: unknown) {
+      return decideHandler(
+        new Request("http://localhost/api/admin/decide", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json"
+          },
           body: JSON.stringify(body)
         })
       );
@@ -227,6 +293,15 @@ async function createHarness() {
       );
     }
   };
+}
+
+function adminRequest(): Request {
+  return new Request("http://localhost/api/admin/queue", {
+    method: "GET",
+    headers: {
+      authorization: "Bearer test-admin-token"
+    }
+  });
 }
 
 async function createFindDeps(): Promise<FindRouteDeps> {

@@ -33,6 +33,7 @@ export type AdminDecisionResponse = AdminDecisionResult & {
 
 export interface AdminRouteDeps {
   readonly store: PassDemoStore;
+  readonly env?: NodeJS.ProcessEnv;
   readonly now?: () => Date;
   readonly reviewer?: string;
   readonly embedApprovedRecommendation?: (
@@ -52,6 +53,7 @@ export function defaultAdminRouteDeps(): AdminRouteDeps {
 
   return {
     store: passDeps.store,
+    env: process.env,
     embedApprovedRecommendation: (recommendationId) =>
       embedApprovedRecommendationInFindStore({
         passStore: passDeps.store,
@@ -62,7 +64,13 @@ export function defaultAdminRouteDeps(): AdminRouteDeps {
 }
 
 export function createAdminQueueGetHandler(deps: AdminRouteDeps) {
-  return async (): Promise<Response> => {
+  return async (request: Request): Promise<Response> => {
+    const auth = authorizeAdmin(request, deps.env);
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
     return json({
       queue: await deps.store.listAdminReviewQueue()
     } satisfies AdminQueueResponse);
@@ -71,6 +79,12 @@ export function createAdminQueueGetHandler(deps: AdminRouteDeps) {
 
 export function createAdminDecidePostHandler(deps: AdminRouteDeps) {
   return async (request: Request): Promise<Response> => {
+    const auth = authorizeAdmin(request, deps.env);
+
+    if (!auth.ok) {
+      return auth.response;
+    }
+
     const parsed = parseAdminDecisionBody(await readJson(request));
 
     if (!parsed.ok) {
@@ -147,6 +161,34 @@ export async function embedApprovedRecommendationInFindStore(input: {
     },
     embed: findDeps.embed
   });
+}
+
+function authorizeAdmin(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly response: Response } {
+  const expectedToken = env.ADMIN_DEMO_TOKEN?.trim();
+
+  if (!expectedToken) {
+    return {
+      ok: false,
+      response: json({ error: "ADMIN_DISABLED" }, 503)
+    };
+  }
+
+  const authorization = request.headers.get("authorization") ?? "";
+  const suppliedToken = /^Bearer\s+(.+)$/iu.exec(authorization)?.[1]?.trim();
+
+  if (suppliedToken !== expectedToken) {
+    return {
+      ok: false,
+      response: json({ error: "ADMIN_UNAUTHORIZED" }, 401)
+    };
+  }
+
+  return { ok: true };
 }
 
 function addDocumentToFindCorpus(

@@ -15,6 +15,7 @@ import {
 } from "../../../../../../packages/engine/src/retrieval/index";
 import { embedTextDevOnly } from "../../../../../../packages/engine/src/llm/embed";
 import {
+  SafetyGateUnavailableError,
   safetyGate as defaultSafetyGate,
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index";
@@ -114,9 +115,14 @@ export function createFindPostHandler(deps: FindRouteDeps) {
 
     const startedAt = deps.now?.() ?? performance.now();
     const body = parsed.body;
-    const gate = await (deps.safetyGate ?? defaultRouteSafetyGate(env))(
+    const gate = await routeSafetyGate(
+      deps.safetyGate ?? defaultRouteSafetyGate(env),
       body.text
     );
+
+    if (gate instanceof Response) {
+      return gate;
+    }
 
     if (gate.crisis) {
       return json(CRISIS_FIND_RESPONSE);
@@ -244,6 +250,21 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
 
 function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
   return (text: string) => defaultSafetyGate(text, { env });
+}
+
+async function routeSafetyGate(
+  gate: (text: string) => Promise<SafetyGateResult>,
+  text: string
+): Promise<SafetyGateResult | Response> {
+  try {
+    return await gate(text);
+  } catch (error) {
+    if (error instanceof SafetyGateUnavailableError) {
+      return json({ error: "SAFETY_GATE_UNAVAILABLE" }, 503);
+    }
+
+    throw error;
+  }
 }
 
 function defaultRouteUnderstand(env: NodeJS.ProcessEnv) {

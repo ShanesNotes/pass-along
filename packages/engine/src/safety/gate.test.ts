@@ -1,14 +1,30 @@
 import { describe, expect, test } from "vitest";
 import {
   CRISIS_GATE_PROMPT_ID,
+  SafetyGateUnavailableError,
   safetyGate,
   type SafetyClassifierResult
 } from "./index.js";
 
 describe("safetyGate", () => {
-  test("lets tier 1 decide when tier 2 is skipped for missing API key", async () => {
+  test("strict mode rejects a missing tier-2 classifier key instead of degrading silently", async () => {
     await expect(
       safetyGate("I do not see the point anymore.", { env: {} })
+    ).rejects.toBeInstanceOf(SafetyGateUnavailableError);
+
+    await expect(
+      safetyGate("Looking for teen anxiety CBT in Denver.", { env: {} })
+    ).rejects.toMatchObject({
+      code: "SAFETY_GATE_UNAVAILABLE",
+      missingEnvVar: "ANTHROPIC_API_KEY"
+    });
+  });
+
+  test("lets tier 1 decide when tier 2 is explicitly optional for local demos", async () => {
+    const env = { CRISIS_TIER2_OPTIONAL: "1" };
+
+    await expect(
+      safetyGate("I do not see the point anymore.", { env })
     ).resolves.toMatchObject({
       crisis: true,
       degraded: true,
@@ -23,7 +39,7 @@ describe("safetyGate", () => {
     });
 
     await expect(
-      safetyGate("Looking for teen anxiety CBT in Denver.", { env: {} })
+      safetyGate("Looking for teen anxiety CBT in Denver.", { env })
     ).resolves.toMatchObject({
       crisis: false,
       degraded: true,

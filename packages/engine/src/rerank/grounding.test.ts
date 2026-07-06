@@ -48,6 +48,54 @@ describe("validateGroundedRerankResult", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("rec_fake");
   });
 
+  test("drops fabricated why claims even when they cite a real span id", () => {
+    const warn = vi.fn();
+    const result = validateGroundedRerankResult({
+      candidates: [
+        {
+          id: "provider_1",
+          snippets: [
+            {
+              span_id: "provider_1:rec_1:keystone",
+              text:
+                "CBT practice on the bus helped panic spikes after school."
+            }
+          ]
+        }
+      ],
+      output: {
+        results: [
+          {
+            id: "provider_1",
+            score: 0.91,
+            why: [
+              {
+                text: "They offer a 30-day money-back guarantee.",
+                cited_span_ids: ["provider_1:rec_1:keystone"]
+              }
+            ]
+          }
+        ]
+      },
+      warn
+    });
+
+    expect(result.dropped_why_count).toBe(1);
+    expect(result.results).toEqual([
+      {
+        id: "provider_1",
+        score: 0.91,
+        why: null,
+        cited_span_ids: []
+      }
+    ]);
+    expect(warn).toHaveBeenCalledWith("find.rerank_grounding_dropped", {
+      dropped_why_count: 1,
+      dropped_result_count: 0,
+      unknown_candidate_count: 0
+    });
+  });
+
   test("never lets randomly fabricated cited span ids through", () => {
     const realSpanId = "provider_1:rec_1:keystone";
     const candidates = [candidate("provider_1", [realSpanId])];
@@ -106,7 +154,7 @@ function candidate(id: string, spanIds: readonly string[]): RerankCandidate {
     id,
     snippets: spanIds.map((spanId) => ({
       span_id: spanId,
-      text: `Grounded text for ${spanId}`
+      text: `This real candidate span has grounded text for ${spanId}`
     }))
   };
 }

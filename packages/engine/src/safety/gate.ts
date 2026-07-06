@@ -29,6 +29,17 @@ export interface SafetyGateOptions extends SafetyClassifyOptions {
   readonly ruleMatcher?: SafetyRuleMatcher;
 }
 
+export class SafetyGateUnavailableError extends Error {
+  readonly code = "SAFETY_GATE_UNAVAILABLE";
+  readonly missingEnvVar: string;
+
+  constructor(missingEnvVar: string) {
+    super("Safety gate unavailable because the tier-2 classifier key is missing");
+    this.name = "SafetyGateUnavailableError";
+    this.missingEnvVar = missingEnvVar;
+  }
+}
+
 export async function safetyGate(
   input: string,
   options: SafetyGateOptions = {}
@@ -39,12 +50,24 @@ export async function safetyGate(
   const tier2Promise = runClassifier(input, options);
   const [tier1, tier2] = await Promise.all([tier1Promise, tier2Promise]);
 
+  if (
+    tier2.status === "skipped" &&
+    tier2.reason === "missing_api_key" &&
+    !tier2Optional(options.env ?? process.env)
+  ) {
+    throw new SafetyGateUnavailableError(tier2.missingEnvVar);
+  }
+
   return {
     crisis: tier1.triggered || tier2.crisis,
     degraded: tier2.status !== "completed",
     tier1,
     tier2
   };
+}
+
+function tier2Optional(env: NodeJS.ProcessEnv): boolean {
+  return env.CRISIS_TIER2_OPTIONAL === "1";
 }
 
 async function runClassifier(

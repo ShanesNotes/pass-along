@@ -5,7 +5,7 @@ import {
 
 export const runtime = "nodejs";
 
-export async function GET(): Promise<Response> {
-  // Future auth seam: wrap this demo handler with Supabase admin-role auth.
-  return createAdminQueueGetHandler(defaultAdminRouteDeps())();
+export async function GET(request: Request): Promise<Response> {
+  // Future Supabase-auth seam: replace this demo bearer token with admin-role auth.
+  return createAdminQueueGetHandler(defaultAdminRouteDeps())(request);
 }

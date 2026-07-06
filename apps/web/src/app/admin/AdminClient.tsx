@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { taxonomyCandidates, dlqEntries } from "../../fixtures/adminQueue";
 import { highlightSpans } from "../../lib/highlightSpans";
@@ -52,7 +52,11 @@ type QueueResponse = {
   readonly queue: readonly QueueSubmission[];
 };
 
+const ADMIN_TOKEN_STORAGE_KEY = "pass-along-admin-demo-token";
+
 export function AdminClient() {
+  const [adminToken, setAdminToken] = useState("");
+  const [tokenDraft, setTokenDraft] = useState("");
   const [submissions, setSubmissions] = useState<readonly QueueSubmission[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [busyId, setBusyId] = useState<string | undefined>();
@@ -62,11 +66,30 @@ export function AdminClient() {
   const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
+    const storedToken = window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) ?? "";
+
+    setAdminToken(storedToken);
+    setTokenDraft(storedToken);
+    setLoading(storedToken.length > 0);
+  }, []);
+
+  useEffect(() => {
     let active = true;
+
+    if (adminToken.length === 0) {
+      setLoading(false);
+      setSubmissions([]);
+      return () => {
+        active = false;
+      };
+    }
 
     async function loadQueue() {
       try {
-        const response = await fetch("/api/admin/queue", { cache: "no-store" });
+        const response = await fetch("/api/admin/queue", {
+          cache: "no-store",
+          headers: adminHeaders(adminToken)
+        });
 
         if (!response.ok) {
           throw new Error("queue request failed");
@@ -89,12 +112,13 @@ export function AdminClient() {
       }
     }
 
+    setLoading(true);
     void loadQueue();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [adminToken]);
 
   useEffect(() => {
     setSelectedIndex((index) =>
@@ -117,7 +141,10 @@ export function AdminClient() {
       try {
         const response = await fetch("/api/admin/decide", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            ...adminHeaders(adminToken),
+            "content-type": "application/json"
+          },
           body: JSON.stringify(body)
         });
 
@@ -142,7 +169,23 @@ export function AdminClient() {
         setBusyId(undefined);
       }
     },
-    [drafts]
+    [adminToken, drafts]
+  );
+
+  const saveToken = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const token = tokenDraft.trim();
+
+      if (token.length > 0) {
+        window.sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+      } else {
+        window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      }
+
+      setAdminToken(token);
+    },
+    [tokenDraft]
   );
 
   useEffect(() => {
@@ -197,6 +240,28 @@ export function AdminClient() {
         <Link href="/admin/metrics">View founder metrics dashboard →</Link>
       </p>
 
+      <form onSubmit={saveToken} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", margin: "0 0 1.25rem" }}>
+        <label style={{ display: "grid", gap: 4, fontSize: "0.85rem", color: "var(--ink-soft)" }}>
+          Admin token
+          <input
+            type="password"
+            value={tokenDraft}
+            onChange={(event) => setTokenDraft(event.target.value)}
+            autoComplete="off"
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              padding: "8px 10px",
+              font: "inherit",
+              minWidth: 260
+            }}
+          />
+        </label>
+        <button className="pa-btn" type="submit">
+          Load queue
+        </button>
+      </form>
+
       <section style={{ marginTop: "1.5rem" }}>
         <h2 style={{ fontSize: "1.1rem" }}>Flagged submissions ({submissions.length})</h2>
         {error && <p style={{ color: "#9a5a3f", fontWeight: 700 }}>{error}</p>}
@@ -229,6 +294,12 @@ export function AdminClient() {
       <StaticDlqPanel />
     </main>
   );
+}
+
+function adminHeaders(token: string): HeadersInit {
+  return {
+    authorization: `Bearer ${token}`
+  };
 }
 
 function SubmissionRow({

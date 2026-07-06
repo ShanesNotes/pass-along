@@ -76,10 +76,38 @@ describe("POST /api/pass", () => {
       events: 0
     });
   });
+
+  test("returns 503 before persistence when the tier-2 classifier key is missing and strict mode is not opted out", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("CRISIS_TIER2_OPTIONAL", "");
+
+    try {
+      const harness = createHarness({});
+      const story =
+        "Maria Chen helped my sister in Denver build a CBT plan for panic attacks that worked on the bus.";
+      const response = await harness.post({
+        providerId: "p1",
+        story,
+        forWhom: ["a family member"]
+      });
+      const body = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(503);
+      expect(body).toEqual({ error: "SAFETY_GATE_UNAVAILABLE" });
+      await expect(harness.store.debugCounts()).resolves.toEqual({
+        originals: 0,
+        recommendations: 0,
+        events: 0
+      });
+      expect(JSON.stringify(body)).not.toContain(story);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 function createHarness(input: {
-  readonly safetyGate: (story: string) => Promise<SafetyGateResult>;
+  readonly safetyGate?: (story: string) => Promise<SafetyGateResult>;
 }) {
   const store = createPassDemoStore();
   const runner = createInlineJobRunner({
@@ -90,7 +118,7 @@ function createHarness(input: {
   const handler = createPassPostHandler({
     store,
     runner,
-    safetyGate: input.safetyGate,
+    ...(input.safetyGate ? { safetyGate: input.safetyGate } : {}),
     now: () => new Date("2026-07-06T12:00:00.000Z")
   });
 

@@ -6,6 +6,7 @@ export {
   type SafetyClassifyOptions
 } from "./classifier.js";
 export {
+  SafetyGateUnavailableError,
   safetyGate,
   type SafetyClassifier,
   type SafetyGateOptions,

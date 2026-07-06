@@ -1,10 +1,10 @@
+import * as React from "react";
 import Link from "next/link";
 
 const links = [
   { href: "/find", label: "Find (A)" },
   { href: "/pass", label: "Pass along" },
   { href: "/provider/p1", label: "Provider profile (C)" },
-  { href: "/admin", label: "Admin" },
   { href: "/directions", label: "Concept directions" }
 ];
 

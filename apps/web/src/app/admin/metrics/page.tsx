@@ -107,6 +107,16 @@ export default function MetricsPage() {
           <StatRow>
             <StatTile label="Matched rate" value={`${quality.matchedRate.toFixed(0)}%`} caption="Searches that returned results" />
             <StatTile label="Clarify rate" value={`${quality.clarifyRate.toFixed(0)}%`} caption="Understood with confidence < 0.5" />
+            <StatTile
+              label="Understand model"
+              value={`${quality.understoodSourceRates.model.toFixed(0)}%`}
+              caption={`${quality.understoodSourceRates.fallback.toFixed(0)}% fallback`}
+            />
+            <StatTile
+              label="Rerank model"
+              value={`${quality.rerankSourceRates.model.toFixed(0)}%`}
+              caption={`${quality.rerankSourceRates.fallback.toFixed(0)}% fallback`}
+            />
             <StatTile label="Crisis-gate triggers" value={String(quality.crisisGateTriggers)} caption="Count only — no query text" />
             <StatTile
               label="p95 latency"

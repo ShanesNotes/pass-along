@@ -40,6 +40,13 @@ export interface SearchQuality {
   clarifyRate: number;
   crisisGateTriggers: number;
   p95LatencyMs: number | undefined;
+  understoodSourceRates: SourceRates;
+  rerankSourceRates: SourceRates;
+}
+
+export interface SourceRates {
+  model: number;
+  fallback: number;
 }
 
 function median(values: number[]): number | undefined {
@@ -223,6 +230,10 @@ function isFindEvent(
 
 export function searchQuality(events: MetricsEvent[]): SearchQuality {
   const findEvents = events.filter(isFindEvent);
+  const performedEvents = events.filter(
+    (e): e is MetricsEvent & { event: Extract<MetricsEvent["event"], { type: "find.performed" }> } =>
+      e.event.type === "find.performed"
+  );
   const matched = findEvents.filter((e) => e.event.type === "find.performed").length;
   const matchedRate = findEvents.length === 0 ? 0 : (matched / findEvents.length) * 100;
 
@@ -233,14 +244,39 @@ export function searchQuality(events: MetricsEvent[]): SearchQuality {
 
   const crisisGateTriggers = events.filter((e) => e.crisisTriggered === true).length;
 
-  const latencies = events
-    .filter((e) => e.event.type === "find.performed")
-    .map((e) => (e.event.type === "find.performed" ? e.event.payload.latency_ms : 0));
+  const latencies = performedEvents.map((e) => e.event.payload.latency_ms);
 
   return {
     matchedRate,
     clarifyRate,
     crisisGateTriggers,
-    p95LatencyMs: percentile(latencies, 95)
+    p95LatencyMs: percentile(latencies, 95),
+    understoodSourceRates: sourceRates(
+      performedEvents.map((e) => e.event.payload.understood_source)
+    ),
+    rerankSourceRates: sourceRates(
+      performedEvents.map((e) => e.event.payload.rerank_source)
+    )
+  };
+}
+
+function sourceRates(
+  values: readonly ("model" | "fallback" | undefined)[]
+): SourceRates {
+  const known = values.filter(
+    (value): value is "model" | "fallback" =>
+      value === "model" || value === "fallback"
+  );
+
+  if (known.length === 0) {
+    return { model: 0, fallback: 0 };
+  }
+
+  const model = known.filter((value) => value === "model").length;
+  const fallback = known.length - model;
+
+  return {
+    model: (model / known.length) * 100,
+    fallback: (fallback / known.length) * 100
   };
 }

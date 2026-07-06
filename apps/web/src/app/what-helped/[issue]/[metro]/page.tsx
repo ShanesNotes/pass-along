@@ -1,9 +1,14 @@
+import * as React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   composeAggregatePage,
   type AggregatePageDraft
 } from "../../../../../../../packages/engine/src/aggregate/index";
+import {
+  checkedMonthYear,
+  currentDatedVerifiedCheck
+} from "../../../../../../../packages/engine/src/verification/index";
 import { providers } from "../../../../fixtures/providers";
 
 const METRO_BY_SLUG: Record<string, string> = {
@@ -104,6 +109,7 @@ function ProviderList({ draft }: { readonly draft: AggregatePageDraft }) {
       <div style={{ display: "grid", gap: "0.6rem" }}>
         {draft.providers.map((mention) => {
           const provider = providers.find((entry) => entry.id === mention.providerId);
+          const licenseCheck = currentDatedVerifiedCheck(provider?.license.check);
 
           if (!provider) {
             return null;
@@ -122,10 +128,10 @@ function ProviderList({ draft }: { readonly draft: AggregatePageDraft }) {
                 <span className="pa-pill pa-pill-passed">
                   {mention.storyCount} {mention.storyCount === 1 ? "story" : "stories"} here
                 </span>
-                {provider.license.status === "verified" ? (
-                  <span className="pa-pill-verified">✓ Verified</span>
-                ) : (
-                  <span style={{ fontSize: 13, color: "var(--ink-faint)" }}>verification pending</span>
+                {licenseCheck && (
+                  <span className="pa-pill-verified">
+                    ✓ Verified · checked {checkedMonthYear(licenseCheck)}
+                  </span>
                 )}
               </span>
             </div>

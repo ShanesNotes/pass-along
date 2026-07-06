@@ -31,10 +31,12 @@ export function validateGroundedRerankResult(input: {
   readonly output: RerankModelOutput;
   readonly warn?: RerankWarn;
 }): GroundedRerankResult {
-  const candidateSpanIds = new Map(
+  const candidateSpans = new Map(
     input.candidates.map((candidate) => [
       candidate.id,
-      new Set(candidate.snippets.map((snippet) => snippet.span_id))
+      new Map(
+        candidate.snippets.map((snippet) => [snippet.span_id, snippet.text])
+      )
     ])
   );
   const seenCandidates = new Set<string>();
@@ -50,9 +52,9 @@ export function validateGroundedRerankResult(input: {
     }
 
     seenCandidates.add(item.id);
-    const allowedSpanIds = candidateSpanIds.get(item.id);
+    const allowedSpans = candidateSpans.get(item.id);
 
-    if (!allowedSpanIds) {
+    if (!allowedSpans) {
       unknownCandidateCount += 1;
       droppedResultCount += 1;
       continue;
@@ -60,14 +62,20 @@ export function validateGroundedRerankResult(input: {
 
     const groundedWhy = item.why.filter((sentence) => {
       const hasOnlyRealSpans = sentence.cited_span_ids.every((spanId) =>
-        allowedSpanIds.has(spanId)
+        allowedSpans.has(spanId)
       );
+      const hasLexicalSupport =
+        hasOnlyRealSpans &&
+        hasEnoughLexicalSupport(
+          sentence.text,
+          sentence.cited_span_ids.map((spanId) => allowedSpans.get(spanId) ?? "")
+        );
 
-      if (!hasOnlyRealSpans) {
+      if (!hasOnlyRealSpans || !hasLexicalSupport) {
         droppedWhyCount += 1;
       }
 
-      return hasOnlyRealSpans;
+      return hasOnlyRealSpans && hasLexicalSupport;
     });
     const citedSpanIds = unique(
       groundedWhy.flatMap((sentence) => sentence.cited_span_ids)
@@ -108,3 +116,61 @@ export function validateGroundedRerankResult(input: {
 function unique(values: readonly string[]): readonly string[] {
   return [...new Set(values)];
 }
+
+// This is a lexical support guard, not full semantic entailment. It blocks the
+// easy fabricated-claim class where a model cites a real span while saying
+// something with no shared content; fuller entailment is future work.
+function hasEnoughLexicalSupport(
+  whyText: string,
+  citedSpanTexts: readonly string[]
+): boolean {
+  const whyWords = contentWords(whyText);
+  const spanWords = new Set(citedSpanTexts.flatMap(contentWords));
+  let overlap = 0;
+
+  for (const word of whyWords) {
+    if (spanWords.has(word)) {
+      overlap += 1;
+    }
+
+    if (overlap >= 2) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function contentWords(text: string): readonly string[] {
+  return unique(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/u)
+      .filter((word) => word.length >= 4 && !STOPWORDS.has(word))
+  );
+}
+
+const STOPWORDS = new Set([
+  "about",
+  "after",
+  "also",
+  "because",
+  "been",
+  "before",
+  "being",
+  "from",
+  "have",
+  "into",
+  "only",
+  "that",
+  "their",
+  "them",
+  "then",
+  "there",
+  "they",
+  "this",
+  "were",
+  "when",
+  "with",
+  "would"
+]);

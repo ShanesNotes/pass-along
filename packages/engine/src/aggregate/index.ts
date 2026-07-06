@@ -11,6 +11,13 @@ export const AGGREGATE_PROMPT_ID = "aggregate@1";
 export const AGGREGATE_MIN_STORIES = 3;
 
 export type AggregateSource = "model" | "fallback";
+export type AggregateWarn = (
+  event: "aggregate.title_grounding_replaced",
+  fields: {
+    readonly replaced_headline_count: number;
+    readonly replaced_theme_title_count: number;
+  }
+) => void;
 
 export interface ProviderMention {
   readonly providerId: string;
@@ -26,26 +33,19 @@ export interface AggregatePageDraft {
   readonly source: AggregateSource;
 }
 
-export type AggregatePageOptions = Pick<
-  CompleteOptions,
-  | "env"
-  | "transport"
-  | "timeoutMs"
-  | "maxRetries"
-  | "backoffBaseMs"
-  | "inference_geo"
-  | "sleep"
->;
-
-const THEME_TITLES: Record<string, string> = {
-  cbt: "Practical, skills-based sessions",
-  telehealth: "Telehealth that still feels personal",
-  new_parent: "Understanding what new parents are carrying",
-  evenings: "Evening availability that actually works",
-  group_support: "Grief groups that don't rush you",
-  sliding_scale: "Sliding-scale pricing that removed a barrier",
-  spouse_loss: "Specifically for losing a spouse"
-};
+export interface AggregatePageOptions
+  extends Pick<
+    CompleteOptions,
+    | "env"
+    | "transport"
+    | "timeoutMs"
+    | "maxRetries"
+    | "backoffBaseMs"
+    | "inference_geo"
+    | "sleep"
+  > {
+  readonly warn?: AggregateWarn;
+}
 
 /** For an issue x metro cluster with at least AGGREGATE_MIN_STORIES stories,
  * compose a page draft: a headline, 2-3 themes each grounded in verbatim
@@ -102,7 +102,7 @@ export function fallbackComposeAggregatePage(
     rankedTags.length > 0 ? rankedTags : [["shared experiences", cluster]];
 
   const themes: ThemeDraft[] = themeSource.map(([tagValue, list]) => ({
-    title: THEME_TITLES[tagValue] ?? tagValue.replaceAll("_", " "),
+    title: themeTitleForTag(tagValue),
     quotes: list.map((story) => ({
       storyId: story.id,
       providerId: story.providerId,
@@ -115,7 +115,7 @@ export function fallbackComposeAggregatePage(
   return {
     issue,
     metro,
-    headline: `What helped people with ${humanize(issue)} in ${metro}`,
+    headline: aggregateHeadline(issue, metro),
     themes: grounded.themes,
     providers: providerMentions(cluster),
     source: "fallback"
@@ -170,14 +170,74 @@ async function modelComposeAggregatePage(
   if (grounded.themes.length === 0) {
     return undefined;
   }
+  const titled = groundedAggregateCopy({
+    issue,
+    metro,
+    parsedHeadline: parsed.headline,
+    themes: grounded.themes,
+    cluster
+  });
+
+  if (
+    options.warn &&
+    (titled.replacedHeadlineCount > 0 || titled.replacedThemeTitleCount > 0)
+  ) {
+    options.warn("aggregate.title_grounding_replaced", {
+      replaced_headline_count: titled.replacedHeadlineCount,
+      replaced_theme_title_count: titled.replacedThemeTitleCount
+    });
+  }
 
   return {
     issue,
     metro,
-    headline: parsed.headline,
-    themes: grounded.themes,
+    headline: titled.headline,
+    themes: titled.themes,
     providers: providerMentions(cluster),
     source: "model"
+  };
+}
+
+function groundedAggregateCopy(input: {
+  readonly issue: string;
+  readonly metro: string;
+  readonly parsedHeadline: string;
+  readonly themes: readonly ThemeDraft[];
+  readonly cluster: readonly ScrubbedStory[];
+}): {
+  readonly headline: string;
+  readonly themes: readonly ThemeDraft[];
+  readonly replacedHeadlineCount: number;
+  readonly replacedThemeTitleCount: number;
+} {
+  const storiesById = new Map(input.cluster.map((story) => [story.id, story]));
+  const headline = aggregateHeadline(input.issue, input.metro);
+  let replacedThemeTitleCount = 0;
+  const themes = input.themes.map((theme) => {
+    const tags = [
+      ...uniqueStrings(
+        theme.quotes.flatMap(
+          (quote) => storiesById.get(quote.storyId)?.cooccurringTags ?? []
+        )
+      )
+    ].sort();
+    const allowedTitles = tags.map(themeTitleForTag);
+    const title = allowedTitles.includes(theme.title)
+      ? theme.title
+      : allowedTitles[0] ?? themeTitleForTag("shared experiences");
+
+    if (title !== theme.title) {
+      replacedThemeTitleCount += 1;
+    }
+
+    return { ...theme, title };
+  });
+
+  return {
+    headline,
+    themes,
+    replacedHeadlineCount: input.parsedHeadline === headline ? 0 : 1,
+    replacedThemeTitleCount
   };
 }
 
@@ -198,6 +258,18 @@ function providerMentions(
 
 function humanize(value: string): string {
   return value.replaceAll("_", " ");
+}
+
+function aggregateHeadline(issue: string, metro: string): string {
+  return `What helped people with ${humanize(issue)} in ${metro}`;
+}
+
+function themeTitleForTag(tag: string): string {
+  return `What people said about ${humanize(tag)}`;
+}
+
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return [...new Set(values)];
 }
 
 interface ParsedAggregateResponse {

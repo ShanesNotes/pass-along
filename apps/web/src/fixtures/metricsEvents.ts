@@ -175,6 +175,8 @@ function generate(): { events: MetricsEvent[]; topics: RecommendationTopic[] } {
       const understood = makeUnderstoodQuery(rand, issue);
       const crisisTriggered = rand() < 0.015;
       const resultCount = crisisTriggered ? 0 : Math.floor(rand() * 6);
+      const understoodSource = rand() < 0.78 ? "model" : "fallback";
+      const rerankSource = rand() < 0.72 ? "model" : "fallback";
 
       if (resultCount === 0) {
         events.push({
@@ -194,6 +196,8 @@ function generate(): { events: MetricsEvent[]; topics: RecommendationTopic[] } {
               query_hash_sha256: fakeHex(rand, 64),
               result_count: resultCount,
               latency_ms: 250 + Math.floor(rand() * 900),
+              understood_source: understoodSource,
+              rerank_source: rerankSource,
               degraded: rand() < 0.03
             }
           },

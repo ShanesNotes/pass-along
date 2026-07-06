@@ -48,7 +48,8 @@ describe("POST /api/find", () => {
 
   test("crisis path returns support response and stores nothing", async () => {
     const harness = await createHarness({
-      ANTHROPIC_API_KEY: undefined
+      ANTHROPIC_API_KEY: undefined,
+      CRISIS_TIER2_OPTIONAL: "1"
     });
     const response = await harness.post({
       text: "I do not see the point anymore.",
@@ -67,6 +68,51 @@ describe("POST /api/find", () => {
     expect(harness.queryRows).toEqual([]);
     expect(harness.embedInputs).toEqual([]);
     expect(harness.understandInputs).toEqual([]);
+  });
+
+  test("returns 503 when the tier-2 classifier key is missing and strict mode is not opted out", async () => {
+    const harness = await createHarness({
+      ANTHROPIC_API_KEY: undefined,
+      CRISIS_TIER2_OPTIONAL: undefined
+    });
+    const text = "Looking for teen anxiety CBT in Denver";
+    const response = await harness.post({
+      text,
+      kind: "therapist",
+      location: "Denver"
+    });
+    const body = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({ error: "SAFETY_GATE_UNAVAILABLE" });
+    expect(harness.events).toEqual([]);
+    expect(harness.queryRows).toEqual([]);
+    expect(harness.embedInputs).toEqual([]);
+    expect(harness.understandInputs).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain(text);
+  });
+
+  test("keeps tier-1-only mode available when CRISIS_TIER2_OPTIONAL is explicit", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const harness = await createHarness({
+        ANTHROPIC_API_KEY: undefined,
+        CRISIS_TIER2_OPTIONAL: "1"
+      });
+      const response = await harness.post({
+        text: "Looking for teen anxiety CBT in Denver",
+        kind: "therapist",
+        location: "Denver"
+      });
+
+      expect(response.status).toBe(200);
+      expect(warn).toHaveBeenCalledWith("find.safety_gate_degraded", {
+        reason: "missing_api_key"
+      });
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   test("happy path emits hash-only find event and cards", async () => {

@@ -9,6 +9,7 @@ import {
   type ModerationEventRow
 } from "../../../../../../packages/engine/src/jobs/index";
 import {
+  SafetyGateUnavailableError,
   safetyGate as defaultSafetyGate,
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index";
@@ -185,6 +186,7 @@ export interface PassDemoStore
 export interface PassRouteDeps {
   readonly store: PassDemoStore;
   readonly runner: ReturnType<typeof createInlineJobRunner>;
+  readonly env?: NodeJS.ProcessEnv;
   readonly safetyGate?: (story: string) => Promise<SafetyGateResult>;
   readonly now?: () => Date;
 }
@@ -201,19 +203,27 @@ let defaultDeps: PassRouteDeps | undefined;
 
 export function createPassPostHandler(deps: PassRouteDeps) {
   return async (request: Request): Promise<Response> => {
+    const env = deps.env ?? process.env;
     const parsed = parsePassRequestBody(await readJson(request), deps.store);
 
     if (!parsed.ok) {
       return json({ error: "INVALID_PASS_REQUEST" }, 400);
     }
 
-    const gate = await (deps.safetyGate ?? defaultRouteSafetyGate)(
+    const gate = await routeSafetyGate(
+      deps.safetyGate ?? defaultRouteSafetyGate(env),
       parsed.body.story
     );
+
+    if (gate instanceof Response) {
+      return gate;
+    }
 
     if (gate.crisis) {
       return json(CRISIS_PASS_RESPONSE);
     }
+
+    warnIfSafetyGateDegraded(gate);
 
     const now = deps.now?.() ?? new Date();
     const recommendation = deps.store.createSubmission(parsed.body, now);
@@ -238,6 +248,7 @@ export function defaultPassRouteDeps(): PassRouteDeps {
 
     defaultDeps = {
       store,
+      env: process.env,
       runner: createInlineJobRunner({
         storage: store,
         jobs: JOB_DEFINITIONS
@@ -727,8 +738,33 @@ function reviewStatusFor(state: SubmissionState): string {
   return "Intake is still processing this story.";
 }
 
-function defaultRouteSafetyGate(story: string): Promise<SafetyGateResult> {
-  return defaultSafetyGate(story, { env: process.env });
+function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
+  return (story: string) => defaultSafetyGate(story, { env });
+}
+
+async function routeSafetyGate(
+  gate: (story: string) => Promise<SafetyGateResult>,
+  story: string
+): Promise<SafetyGateResult | Response> {
+  try {
+    return await gate(story);
+  } catch (error) {
+    if (error instanceof SafetyGateUnavailableError) {
+      return json({ error: "SAFETY_GATE_UNAVAILABLE" }, 503);
+    }
+
+    throw error;
+  }
+}
+
+function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
+  if (!gate.degraded) {
+    return;
+  }
+
+  console.warn("pass.safety_gate_degraded", {
+    reason: gate.tier2.reason
+  });
 }
 
 function parsePassRequestBody(

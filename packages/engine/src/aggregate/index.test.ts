@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { Transport } from "../llm/adapter.js";
 import {
   AGGREGATE_MIN_STORIES,
@@ -131,8 +131,46 @@ describe("composeAggregatePage", () => {
     expect(draft).toBeDefined();
     expect(draft?.source).toBe("model");
     expect(draft?.themes).toHaveLength(1);
-    expect(draft?.themes[0]?.title).toBe("Real theme");
+    expect(draft?.themes[0]?.title).toBe("What people said about group support");
     expect(draft?.themes[0]?.quotes[0]?.text).toBe(realStory.keystone);
+  });
+
+  test("a model response with fabricated headline and title is replaced by grounded templates", async () => {
+    const cluster = storiesForCluster("grief", "Austin, TX");
+    const realStory = cluster[0];
+
+    if (!realStory) {
+      throw new Error("Expected a grief/Austin fixture story");
+    }
+
+    const warn = vi.fn();
+    const transport: Transport = async () =>
+      jsonResponse(
+        googleCandidate(
+          JSON.stringify({
+            headline: "Guaranteed grief recovery in 30 days",
+            themes: [
+              {
+                title: "Guaranteed outcomes and instant relief",
+                quotes: [{ story_id: realStory.id, text: realStory.keystone }]
+              }
+            ]
+          })
+        )
+      );
+
+    const draft = await composeAggregatePage("grief", "Austin, TX", SCRUBBED_STORIES, {
+      env: { GOOGLE_API_KEY: "test-key" },
+      transport,
+      warn
+    });
+
+    expect(draft?.headline).toBe("What helped people with grief in Austin, TX");
+    expect(draft?.themes[0]?.title).toBe("What people said about group support");
+    expect(warn).toHaveBeenCalledWith("aggregate.title_grounding_replaced", {
+      replaced_headline_count: 1,
+      replaced_theme_title_count: 1
+    });
   });
 
   test("a model response with only hallucinated quotes falls back to the deterministic draft", async () => {

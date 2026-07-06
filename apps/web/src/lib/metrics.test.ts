@@ -137,6 +137,48 @@ describe("searchQuality", () => {
     expect(result.crisisGateTriggers).toBe(1);
     expect(result.p95LatencyMs).toBe(300);
   });
+
+  it("computes understood and rerank model-vs-fallback rates from typed event provenance", () => {
+    const events: MetricsEvent[] = [
+      event("2026-07-01", "Denver, CO", {
+        type: "find.performed",
+        payload: {
+          understood_json: understood("anxiety", 0.9),
+          query_hash_sha256: "a".repeat(64),
+          result_count: 2,
+          latency_ms: 300,
+          understood_source: "model",
+          rerank_source: "fallback"
+        }
+      }),
+      event("2026-07-01", "Austin, TX", {
+        type: "find.performed",
+        payload: {
+          understood_json: understood("grief", 0.9),
+          query_hash_sha256: "b".repeat(64),
+          result_count: 1,
+          latency_ms: 350,
+          understood_source: "fallback",
+          rerank_source: "model"
+        }
+      }),
+      event("2026-07-01", "Denver, CO", {
+        type: "find.unmet",
+        payload: { understood_json: understood("ocd", 0.9) }
+      })
+    ];
+
+    const result = searchQuality(events);
+
+    expect(result.understoodSourceRates).toEqual({
+      model: 50,
+      fallback: 50
+    });
+    expect(result.rerankSourceRates).toEqual({
+      model: 50,
+      fallback: 50
+    });
+  });
 });
 
 describe("synthetic fixture generation", () => {
@@ -152,6 +194,11 @@ describe("synthetic fixture generation", () => {
       if (e.event.type === "find.performed" || e.event.type === "find.unmet") {
         expect(typeof e.event.payload.understood_json).toBe("object");
         expect((e.event.payload as { queryText?: unknown }).queryText).toBeUndefined();
+      }
+
+      if (e.event.type === "find.performed") {
+        expect(e.event.payload.understood_source).toMatch(/^(model|fallback)$/u);
+        expect(e.event.payload.rerank_source).toMatch(/^(model|fallback)$/u);
       }
     }
   });
