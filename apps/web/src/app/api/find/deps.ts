@@ -10,6 +10,7 @@ import {
   type ProviderKind,
   type RetrievalCorpus,
   type RetrievalFilters,
+  type VectorSearchResult,
   type VectorStorePort
 } from "../../../../../../packages/engine/src/retrieval/index";
 import { embedTextDevOnly } from "../../../../../../packages/engine/src/llm/embed";
@@ -27,9 +28,15 @@ import {
   understandQuery as defaultUnderstandQuery,
   type UnderstandQueryResult
 } from "../../../../../../packages/engine/src/understand/index";
+import {
+  rerankMatches,
+  type RerankEngineWarn,
+  type RerankOutcome
+} from "../../../../../../packages/engine/src/rerank/index";
 import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index";
 import type {
   EventCatalog,
+  RerankSource,
   UnderstoodQuery
 } from "../../../../../../packages/core/src/index";
 
@@ -51,6 +58,12 @@ export interface QueryAuditPort {
   upsert(row: QueryAuditRow): Promise<void>;
 }
 
+export interface FindRerankInput {
+  readonly understood: UnderstoodQuery;
+  readonly matches: readonly VectorSearchResult[];
+  readonly corpus: RetrievalCorpus;
+}
+
 export interface FindRouteDeps {
   readonly env?: NodeJS.ProcessEnv;
   readonly corpus: RetrievalCorpus;
@@ -59,6 +72,7 @@ export interface FindRouteDeps {
   readonly queries?: QueryAuditPort;
   readonly safetyGate?: (text: string) => Promise<SafetyGateResult>;
   readonly understand?: (text: string) => Promise<UnderstandQueryResult>;
+  readonly rerank?: (input: FindRerankInput) => Promise<RerankOutcome>;
   readonly embed: (text: string) => Promise<{
     readonly vector: readonly number[];
     readonly metadata: EmbeddingMetadata;
@@ -150,9 +164,18 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       filters,
       topN: DEFAULT_RETRIEVAL_TOP_N
     });
-    const cards = cardsFromMatches(matches, deps.corpus, DEFAULT_CARD_LIMIT).map(
-      toFindApiCard
-    );
+    const reranked = await (deps.rerank ?? defaultRouteRerank(env))({
+      understood: understoodJson,
+      matches,
+      corpus: deps.corpus
+    });
+    const cards = cardsFromMatches(
+      orderMatchesByRerank(matches, reranked.results),
+      deps.corpus,
+      DEFAULT_CARD_LIMIT
+    )
+      .map((card) => applyRerankToCard(card, reranked))
+      .map(toFindApiCard);
     const latencyMs = Math.max(
       0,
       Math.round((deps.now?.() ?? performance.now()) - startedAt)
@@ -165,17 +188,20 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       resultCount: cards.length,
       latencyMs,
       degraded: gate.degraded,
-      understoodSource: understanding.source
+      understoodSource: understanding.source,
+      rerankSource: reranked.source
     });
 
     return json({
       understood: understoodJson,
       source: understanding.source,
+      rerank_source: reranked.source,
       unmet,
       results: cards
     } satisfies {
       understood: UnderstoodQuery;
       source: UnderstandQueryResult["source"];
+      rerank_source: RerankSource;
       unmet: boolean;
       results: readonly FindApiCard[];
     });
@@ -224,6 +250,17 @@ function defaultRouteUnderstand(env: NodeJS.ProcessEnv) {
   return (text: string) => defaultUnderstandQuery(text, { env });
 }
 
+function defaultRouteRerank(env: NodeJS.ProcessEnv) {
+  return (input: FindRerankInput) =>
+    rerankMatches({
+      understood: input.understood,
+      matches: input.matches,
+      corpus: input.corpus,
+      options: { env },
+      warn: warnRerank
+    });
+}
+
 function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
   if (!gate.degraded) {
     return;
@@ -232,6 +269,49 @@ function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
   console.warn("find.safety_gate_degraded", {
     reason: gate.tier2.reason
   });
+}
+
+const warnRerank: RerankEngineWarn = (event, fields) => {
+  console.warn(event, fields);
+};
+
+function orderMatchesByRerank(
+  matches: readonly VectorSearchResult[],
+  results: RerankOutcome["results"]
+): readonly VectorSearchResult[] {
+  const providerOrder = new Map(
+    results.map((result, index) => [result.id, index])
+  );
+
+  return [...matches].sort((left, right) => {
+    const leftRank =
+      providerOrder.get(left.document.providerId) ?? Number.POSITIVE_INFINITY;
+    const rightRank =
+      providerOrder.get(right.document.providerId) ?? Number.POSITIVE_INFINITY;
+
+    if (leftRank === rightRank) {
+      return 0;
+    }
+
+    return leftRank < rightRank ? -1 : 1;
+  });
+}
+
+function applyRerankToCard(
+  card: FindResultCard,
+  reranked: RerankOutcome
+): FindResultCard {
+  const rerankResult = reranked.results.find((result) => result.id === card.id);
+
+  if (!rerankResult) {
+    return card;
+  }
+
+  return {
+    ...card,
+    why: rerankResult.why,
+    cited_span_ids: rerankResult.cited_span_ids
+  };
 }
 
 function toFindApiCard(card: FindResultCard): FindApiCard {
@@ -246,7 +326,8 @@ function toFindApiCard(card: FindResultCard): FindApiCard {
     passed_count: card.passed_count,
     tags: card.tags,
     keystone: card.keystone,
-    why: card.why
+    why: card.why,
+    cited_span_ids: card.cited_span_ids
   };
 
   if (licenseCheck) {
@@ -376,6 +457,7 @@ async function recordFindAttempt(input: {
   readonly latencyMs: number;
   readonly degraded: boolean;
   readonly understoodSource: UnderstandQueryResult["source"];
+  readonly rerankSource?: RerankSource;
 }): Promise<void> {
   await input.deps.queries?.upsert({
     query_hash: input.queryHash,
@@ -389,6 +471,7 @@ async function recordFindAttempt(input: {
       result_count: input.resultCount,
       latency_ms: input.latencyMs,
       understood_source: input.understoodSource,
+      ...(input.rerankSource ? { rerank_source: input.rerankSource } : {}),
       ...(input.degraded ? { degraded: true } : {})
     }
   });

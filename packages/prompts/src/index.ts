@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 export { UNDERSTAND_2_PROMPT } from "./understand2.js";
+export { RERANK_1_PROMPT } from "./rerank1.js";
 
 export type PromptRegistryEntry = {
   id: string;
@@ -47,6 +48,12 @@ export const PROMPT_REGISTRY = {
     version: "1",
     filePath: join(promptRoot, "extract", "1.md"),
     goldensPath: join(promptRoot, "extract", "goldens.jsonl")
+  },
+  "rerank@1": {
+    id: "rerank",
+    version: "1",
+    filePath: join(promptRoot, "rerank", "1.md"),
+    goldensPath: join(promptRoot, "rerank", "goldens.jsonl")
   }
 } as const satisfies Record<string, PromptRegistryEntry>;
 

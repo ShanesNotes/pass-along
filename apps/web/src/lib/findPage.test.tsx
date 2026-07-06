@@ -48,11 +48,15 @@ describe("find page", () => {
   test("renders result cards from the route payload", async () => {
     const query = "Looking for teen anxiety CBT in Denver, ideally evenings";
     const cards = [
-      findCard({
-        id: "provider_teen_denver",
-        name: "North Star Teen Therapy",
-        passed_count: 3
-      }),
+      {
+        ...findCard({
+          id: "provider_teen_denver",
+          name: "North Star Teen Therapy",
+          passed_count: 3
+        }),
+        why: "The recommender mentioned after-school CBT support.",
+        cited_span_ids: ["provider_teen_denver:rec_001:keystone"]
+      },
       findCard({
         id: "provider_family_denver",
         name: "Cedar Table Family Therapy",
@@ -88,6 +92,9 @@ describe("find page", () => {
     expect(html).toContain("population: teen");
     expect(html).toContain("prefers: evenings");
     expect(html).toContain("North Star Teen Therapy");
+    expect(html).toContain("Why this might fit you");
+    expect(html).toContain("The recommender mentioned after-school CBT support.");
+    expect(html).toContain("data-cited-span-ids=\"provider_teen_denver:rec_001:keystone\"");
     expect(html).toContain("Cedar Table Family Therapy");
     expect(html).toContain("Front Range Medication Clinic");
     expect(html).not.toContain("We don&rsquo;t have many recommendations");
@@ -385,7 +392,8 @@ function findCard(
       }
     ],
     keystone: "A synthetic recommendation keystone for the demo.",
-    why: null
+    why: null,
+    cited_span_ids: []
   };
 
   if (licenseCheck) {

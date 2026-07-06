@@ -65,6 +65,7 @@ function cardFor(
       .slice(0, 6),
     keystone: document.keystone,
     verified: document.verified,
-    why: null
+    why: null,
+    cited_span_ids: []
   };
 }

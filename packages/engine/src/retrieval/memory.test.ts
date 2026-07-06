@@ -64,7 +64,8 @@ describe("in-memory retrieval", () => {
       loc: "Austin, TX",
       passed_count: 3,
       verified: true,
-      why: null
+      why: null,
+      cited_span_ids: []
     });
     expect(cards[0]?.tags).toEqual(
       expect.arrayContaining([

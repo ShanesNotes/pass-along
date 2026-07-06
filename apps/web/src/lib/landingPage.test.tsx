@@ -36,7 +36,8 @@ describe("product landing page", () => {
         source: "Colorado DORA cassette",
         checked_at: "2026-06-18T10:00:00.000Z"
       },
-      why: null
+      why: null,
+      cited_span_ids: []
     };
     const { fetcher, calls } = mockFindFetch({
       understood: null,

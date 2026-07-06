@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   PROMPT_REGISTRY,
+  RERANK_1_PROMPT,
   UNDERSTAND_2_PROMPT,
   assertRegisteredGoldensExist,
   listRegisteredPrompts,
@@ -33,6 +34,7 @@ describe("prompt registry", () => {
     expect(Object.keys(PROMPT_REGISTRY).sort()).toEqual([
       "crisis_gate@1",
       "extract@1",
+      "rerank@1",
       "scrub@1",
       "understand@1",
       "understand@2"
@@ -43,5 +45,11 @@ describe("prompt registry", () => {
     const prompt = loadPrompt("understand@2");
 
     expect(readFileSync(prompt.filePath, "utf8")).toBe(UNDERSTAND_2_PROMPT);
+  });
+
+  test("keeps the rerank@1 runtime module synced to the markdown source", () => {
+    const prompt = loadPrompt("rerank@1");
+
+    expect(readFileSync(prompt.filePath, "utf8")).toBe(RERANK_1_PROMPT);
   });
 });

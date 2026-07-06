@@ -10,3 +10,4 @@
 {"suite":"match","id":"match_eating_disorder_teen","input":"Denver teen eating disorder family nutrition facility","query_id":"q_eating_disorder_teen","expect_top3_contains":["rec_028"]}
 {"suite":"match","id":"match_spanish_family","input":"Austin Spanish speaking family parenting relationship therapist","query_id":"q_spanish_family","expect_top3_contains":["rec_031"]}
 {"suite":"match","id":"match_first_responder_burnout","input":"Denver first responder burnout PTSD nightmares therapist","query_id":"q_first_responder_burnout","expect_top3_contains":["rec_034"]}
+{"suite":"match","id":"match_rerank_grounded_teen_anxiety","input":"Denver teen anxiety CBT evenings after school therapist","query_id":"q_rerank_grounded_teen_anxiety","expect_top3_contains":["rec_001"]}

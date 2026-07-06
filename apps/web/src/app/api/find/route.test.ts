@@ -87,9 +87,11 @@ describe("POST /api/find", () => {
     const body = (await response.json()) as {
       understood: UnderstoodQuery;
       source: string;
+      rerank_source: string;
       results: Array<{
         name: string;
-        why: null;
+        why: string | null;
+        cited_span_ids: readonly string[];
         license_check?: {
           status: string;
           source: string;
@@ -101,6 +103,7 @@ describe("POST /api/find", () => {
 
     expect(response.status).toBe(200);
     expect(body.source).toBe("fallback");
+    expect(body.rerank_source).toBe("fallback");
     expect(body.understood).toMatchObject({
       kind: "therapist",
       location: {
@@ -109,7 +112,8 @@ describe("POST /api/find", () => {
     });
     expect(body.results[0]).toMatchObject({
       name: "North Star Teen Therapy",
-      why: null,
+      why: "The first plan for teen anxiety that worked after school instead of only in the office.",
+      cited_span_ids: ["provider_teen_denver:rec_001:keystone"],
       license_check: {
         status: "verified",
         source: "Colorado DORA cassette",
@@ -129,6 +133,7 @@ describe("POST /api/find", () => {
         query_hash_sha256: sha256(text),
         result_count: body.results.length,
         latency_ms: 15,
+        rerank_source: "fallback",
         understood_json: {
           kind: "therapist",
           location: {
@@ -523,7 +528,13 @@ async function createHarness(
     }
   };
   const handler = createFindPostHandler({
-    env: { ...process.env, ANTHROPIC_API_KEY: undefined, ...env },
+    env: {
+      ...process.env,
+      ANTHROPIC_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      ...env
+    },
     corpus,
     store,
     embed: embedForHarness,

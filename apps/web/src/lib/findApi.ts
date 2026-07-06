@@ -3,6 +3,7 @@ import type { LicenseCheckRecord } from "../../../../packages/engine/src/verific
 
 export type FindFetch = typeof fetch;
 export type UnderstandSource = "model" | "fallback";
+export type RerankSource = "model" | "fallback";
 
 export interface FindApiTag {
   readonly value: string;
@@ -19,6 +20,7 @@ export interface FindApiCard {
   readonly keystone: string;
   readonly license_check?: LicenseCheckRecord;
   readonly why: string | null;
+  readonly cited_span_ids: readonly string[];
 }
 
 export interface CrisisSupport {
@@ -42,6 +44,7 @@ export type FindApiResponse =
   | {
       readonly understood: UnderstoodQuery | null;
       readonly source: UnderstandSource;
+      readonly rerank_source?: RerankSource;
       readonly unmet: boolean;
       readonly results: readonly FindApiCard[];
     };
@@ -120,6 +123,9 @@ function parseFindApiResponse(value: unknown): FindApiResponse {
   return {
     understood,
     source,
+    ...("rerank_source" in value
+      ? { rerank_source: rerankSourceField(value, "rerank_source") }
+      : {}),
     unmet: booleanField(value, "unmet"),
     results: value.results.map(parseFindCard)
   };
@@ -137,9 +143,14 @@ function parseFindCard(value: unknown): FindApiCard {
   }
 
   const why = value.why;
+  const citedSpanIds = value.cited_span_ids;
 
   if (why !== null && typeof why !== "string") {
     throw new Error("Find result card why must be null or a string");
+  }
+
+  if (citedSpanIds !== undefined && !Array.isArray(citedSpanIds)) {
+    throw new Error("Find result card cited_span_ids must be an array");
   }
 
   const licenseCheck = parseLicenseCheck(value.license_check);
@@ -153,7 +164,17 @@ function parseFindCard(value: unknown): FindApiCard {
     tags: tags.map(parseFindTag),
     keystone: stringField(value, "keystone"),
     ...(licenseCheck ? { license_check: licenseCheck } : {}),
-    why
+    why,
+    cited_span_ids:
+      citedSpanIds === undefined
+        ? []
+        : citedSpanIds.map((spanId) => {
+            if (typeof spanId !== "string" || spanId.length === 0) {
+              throw new Error("Find result card cited_span_ids must be strings");
+            }
+
+            return spanId;
+          })
   };
 }
 
@@ -243,6 +264,19 @@ function sourceField(
 
   if (value !== "model" && value !== "fallback") {
     throw new Error(`Expected understand source field ${field}`);
+  }
+
+  return value;
+}
+
+function rerankSourceField(
+  record: Record<string, unknown>,
+  field: string
+): RerankSource {
+  const value = record[field];
+
+  if (value !== "model" && value !== "fallback") {
+    throw new Error(`Expected rerank source field ${field}`);
   }
 
   return value;

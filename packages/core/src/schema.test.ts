@@ -135,7 +135,8 @@ describe("EventCatalogSchema", () => {
           result_count: 4,
           latency_ms: 182,
           degraded: true,
-          understood_source: "fallback"
+          understood_source: "fallback",
+          rerank_source: "fallback"
         }
       },
       { type: "find.unmet", payload: { understood_json: understoodQuery } },

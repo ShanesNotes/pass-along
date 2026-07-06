@@ -256,7 +256,7 @@ function ResultCard({ card }: { readonly card: FindApiCard }) {
       </blockquote>
 
       {card.why && (
-        <div className="pa-whymatch">
+        <div className="pa-whymatch" data-cited-span-ids={card.cited_span_ids.join(" ")}>
           <b>Why this might fit you</b>
           {card.why}
         </div>

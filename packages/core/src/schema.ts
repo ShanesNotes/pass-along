@@ -111,6 +111,43 @@ export const RecEnrichmentSchema = z
 const EntityIdSchema = z.string().min(1);
 const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 
+export const RerankCandidateSnippetSchema = z
+  .object({
+    span_id: z.string().min(1),
+    text: z.string().min(1)
+  })
+  .strict();
+
+export const RerankCandidateSchema = z
+  .object({
+    id: EntityIdSchema,
+    snippets: z.array(RerankCandidateSnippetSchema).min(1)
+  })
+  .strict();
+
+export const RerankWhySentenceSchema = z
+  .object({
+    text: z.string().min(1),
+    cited_span_ids: z.array(z.string().min(1)).min(1)
+  })
+  .strict();
+
+export const RerankModelItemSchema = z
+  .object({
+    id: EntityIdSchema,
+    score: ConfidenceSchema,
+    why: z.array(RerankWhySentenceSchema).max(3)
+  })
+  .strict();
+
+export const RerankModelOutputSchema = z
+  .object({
+    results: z.array(RerankModelItemSchema).max(6)
+  })
+  .strict();
+
+export const RerankSourceSchema = z.enum(["model", "fallback"]);
+
 export const SubmissionReceivedEventSchema = z
   .object({
     type: z.literal("submission.received"),
@@ -188,7 +225,8 @@ export const FindPerformedEventSchema = z
         result_count: z.number().int().nonnegative(),
         latency_ms: z.number().int().nonnegative(),
         degraded: z.boolean().optional(),
-        understood_source: z.enum(["model", "fallback"]).optional()
+        understood_source: z.enum(["model", "fallback"]).optional(),
+        rerank_source: RerankSourceSchema.optional()
       })
       .strict()
   })
@@ -250,4 +288,10 @@ export type UnderstoodQuery = z.infer<typeof UnderstoodQuerySchema>;
 export type RecTagType = z.infer<typeof RecTagTypeSchema>;
 export type RecEnrichmentTag = z.infer<typeof RecEnrichmentTagSchema>;
 export type RecEnrichment = z.infer<typeof RecEnrichmentSchema>;
+export type RerankCandidateSnippet = z.infer<typeof RerankCandidateSnippetSchema>;
+export type RerankCandidate = z.infer<typeof RerankCandidateSchema>;
+export type RerankWhySentence = z.infer<typeof RerankWhySentenceSchema>;
+export type RerankModelItem = z.infer<typeof RerankModelItemSchema>;
+export type RerankModelOutput = z.infer<typeof RerankModelOutputSchema>;
+export type RerankSource = z.infer<typeof RerankSourceSchema>;
 export type EventCatalog = z.infer<typeof EventCatalogSchema>;

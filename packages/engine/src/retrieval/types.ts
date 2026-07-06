@@ -88,5 +88,6 @@ export interface FindResultCard {
   readonly tags: readonly FindResultTag[];
   readonly keystone: string;
   readonly verified: boolean;
-  readonly why: null;
+  readonly why: string | null;
+  readonly cited_span_ids: readonly string[];
 }
