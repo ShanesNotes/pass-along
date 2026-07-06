@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Stub } from "../../components/Stub";
+import { postTypeaheadQuery, type TypeaheadApiMatch } from "../../lib/typeaheadApi";
 
 const WHO_OPTIONS = ["myself", "a family member", "a friend", "someone I referred as a professional"];
 
@@ -14,8 +15,8 @@ const PIPELINE_STEPS = [
 
 export function PassClient() {
   const [providerQuery, setProviderQuery] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState<ProviderMatch | undefined>(undefined);
-  const [matches, setMatches] = useState<readonly ProviderMatch[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<TypeaheadApiMatch | undefined>(undefined);
+  const [matches, setMatches] = useState<readonly TypeaheadApiMatch[]>([]);
   const [searchingProviders, setSearchingProviders] = useState(false);
   const [who, setWho] = useState<string | undefined>(undefined);
   const [story, setStory] = useState("");
@@ -36,36 +37,29 @@ export function PassClient() {
       return;
     }
 
-    const controller = new AbortController();
+    let cancelled = false;
     const timeout = setTimeout(() => {
       setSearchingProviders(true);
-      void fetch(`/api/typeahead?q=${encodeURIComponent(trimmed)}`, {
-        signal: controller.signal
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            return [];
-          }
-
-          return parseTypeaheadResponse(await response.json());
-        })
+      void postTypeaheadQuery(trimmed)
         .then((results) => {
-          setMatches(results);
+          if (!cancelled) {
+            setMatches(results);
+          }
         })
-        .catch((error: unknown) => {
-          if (!isAbortError(error)) {
+        .catch(() => {
+          if (!cancelled) {
             setMatches([]);
           }
         })
         .finally(() => {
-          if (!controller.signal.aborted) {
+          if (!cancelled) {
             setSearchingProviders(false);
           }
         });
     }, 180);
 
     return () => {
-      controller.abort();
+      cancelled = true;
       clearTimeout(timeout);
     };
   }, [providerQuery, selectedProvider]);
@@ -223,53 +217,4 @@ function PipelineStrip({ activeIndex }: { activeIndex?: number }) {
       ))}
     </div>
   );
-}
-
-interface ProviderMatch {
-  readonly id: string;
-  readonly name: string;
-  readonly credential: string;
-  readonly loc: string;
-}
-
-function parseTypeaheadResponse(value: unknown): readonly ProviderMatch[] {
-  if (!isRecord(value) || !Array.isArray(value.results)) {
-    return [];
-  }
-
-  return value.results.map(parseProviderMatch).filter(isProviderMatch);
-}
-
-function parseProviderMatch(value: unknown): ProviderMatch | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const id = value.id;
-  const name = value.name;
-  const credential = value.credential;
-  const loc = value.loc;
-
-  if (
-    typeof id !== "string" ||
-    typeof name !== "string" ||
-    typeof credential !== "string" ||
-    typeof loc !== "string"
-  ) {
-    return undefined;
-  }
-
-  return { id, name, credential, loc };
-}
-
-function isProviderMatch(value: ProviderMatch | undefined): value is ProviderMatch {
-  return value !== undefined;
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

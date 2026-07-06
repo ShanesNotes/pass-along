@@ -1,16 +1,22 @@
 import { describe, expect, test, vi } from "vitest";
-import { GET } from "./route";
+import { POST } from "./route";
 
 interface TypeaheadApiResult {
   readonly id: string;
   readonly name: string;
 }
 
-describe("GET /api/typeahead", () => {
+function postRequest(q: string): Request {
+  return new Request("http://localhost/api/typeahead", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ q })
+  });
+}
+
+describe("POST /api/typeahead", () => {
   test("returns fixture-backed provider name matches", async () => {
-    const response = await GET(
-      new Request("http://localhost/api/typeahead?q=juniper")
-    );
+    const response = await POST(postRequest("juniper"));
     const body = (await response.json()) as {
       readonly results: readonly TypeaheadApiResult[];
     };
@@ -23,8 +29,21 @@ describe("GET /api/typeahead", () => {
   });
 
   test("returns an empty result set for blank q", async () => {
-    const response = await GET(
-      new Request("http://localhost/api/typeahead?q=%20")
+    const response = await POST(postRequest(" "));
+
+    await expect(response.json()).resolves.toEqual({ results: [] });
+  });
+
+  test("does not accept the query via the URL", async () => {
+    const response = await POST(
+      new Request(
+        "http://localhost/api/typeahead?q=North+Star+Teen+Therapy",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ q: "" })
+        }
+      )
     );
 
     await expect(response.json()).resolves.toEqual({ results: [] });
@@ -37,11 +56,7 @@ describe("GET /api/typeahead", () => {
     const providerName = "North Star Teen Therapy";
 
     try {
-      const response = await GET(
-        new Request(
-          `http://localhost/api/typeahead?q=${encodeURIComponent(providerName)}`
-        )
-      );
+      const response = await POST(postRequest(providerName));
 
       expect(response.status).toBe(200);
       expect(log).not.toHaveBeenCalled();

@@ -25,10 +25,9 @@ interface TypeaheadRouteDeps {
 
 let defaultDepsPromise: Promise<TypeaheadRouteDeps> | undefined;
 
-export async function GET(request: Request): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   const deps = await defaultTypeaheadRouteDeps();
-  const url = new URL(request.url);
-  const q = url.searchParams.get("q") ?? "";
+  const q = qFromBody(await readJson(request));
 
   if (q.trim().length === 0) {
     return json({ results: [] });
@@ -40,6 +39,23 @@ export async function GET(request: Request): Promise<Response> {
   });
 
   return json({ results: results.map(toApiResult) });
+}
+
+async function readJson(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return undefined;
+  }
+}
+
+function qFromBody(value: unknown): string {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "";
+  }
+
+  const q = (value as Record<string, unknown>).q;
+  return typeof q === "string" ? q : "";
 }
 
 async function defaultTypeaheadRouteDeps(): Promise<TypeaheadRouteDeps> {

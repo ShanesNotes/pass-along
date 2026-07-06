@@ -172,6 +172,17 @@ function isFindPath(normalizedPath) {
     normalizedPath.includes("/api/find/") ||
     normalizedPath.endsWith("/api/find.ts") ||
     normalizedPath.endsWith("/api/find/route.ts") ||
-    normalizedPath.includes("/find/")
+    normalizedPath.includes("/find/") ||
+    isFindNamedLibFile(normalizedPath)
   );
+}
+
+// Client-side find-flow modules (e.g. apps/web/src/lib/findApi.ts) live
+// outside any /find/ directory, so name-match lib files for the find flow too.
+function isFindNamedLibFile(normalizedPath) {
+  const segments = normalizedPath.split("/");
+  const fileName = segments[segments.length - 1] ?? "";
+  const parentDir = segments[segments.length - 2] ?? "";
+
+  return parentDir === "lib" && fileName.includes("find");
 }

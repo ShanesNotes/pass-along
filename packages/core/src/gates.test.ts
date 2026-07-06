@@ -193,6 +193,26 @@ describe("privacy scan", () => {
     expect(`${result.stdout}\n${result.stderr}`).toContain("analytics");
   });
 
+  test("flags analytics calls inside find-flow lib files like findApi.ts", async () => {
+    const root = makeTempRoot("privacy-find-lib");
+    const libDir = join(root, "apps/web/src/lib");
+    const targetPath = join(libDir, "findApi.ts");
+    mkdirSync(libDir, { recursive: true });
+    writeFileSync(
+      targetPath,
+      [
+        "export function reportFindQuery(queryText: string) {",
+        '  analytics.track("find_submitted", { query: queryText });',
+        "}"
+      ].join("\n")
+    );
+
+    const result = await runScript(scannerPath, [root]);
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain("analytics");
+  });
+
   test("flags multi-line raw query logging", async () => {
     const root = makeTempRoot("privacy-multiline-log");
     const targetPath = join(root, "x.ts");
