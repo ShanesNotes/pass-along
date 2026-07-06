@@ -1,11 +1,11 @@
 import Link from "next/link";
 
 const links = [
-  { href: "/", label: "Directions" },
   { href: "/find", label: "Find (A)" },
   { href: "/pass", label: "Pass along" },
   { href: "/provider/p1", label: "Provider profile (C)" },
-  { href: "/admin", label: "Admin" }
+  { href: "/admin", label: "Admin" },
+  { href: "/directions", label: "Concept directions" }
 ];
 
 export function Nav() {
