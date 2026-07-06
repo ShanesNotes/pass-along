@@ -1,0 +1,29 @@
+{
+  "name": "pass-along",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "node --input-type=module -e \"import { ESLint } from 'eslint'; import js from '@eslint/js'; import tseslint from 'typescript-eslint'; const eslint = new ESLint({ overrideConfigFile: true, overrideConfig: tseslint.config({ ignores: ['node_modules/**', '.next/**', 'dist/**', 'coverage/**', 'scripts/__fixtures__/**', '**/next-env.d.ts'] }, js.configs.recommended, ...tseslint.configs.recommended, { languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', URL: 'readonly', URLSearchParams: 'readonly' } }, rules: { 'no-undef': 'off' } }) }); const results = await eslint.lintFiles(['apps/**/*.{ts,tsx}', 'packages/**/*.ts', 'evals/**/*.ts', 'tools/**/*.ts', 'scripts/**/*.mjs']); const formatter = await eslint.loadFormatter('stylish'); const text = formatter.format(results); if (text) console.log(text); if (results.some((result) => result.errorCount > 0 || result.fatalErrorCount > 0)) process.exit(1);\"",
+    "test": "vitest run",
+    "eval": "node -e \"console.log('no eval suites yet')\" --",
+    "privacy:scan": "node scripts/privacy-scan.mjs",
+    "db:lint": "node scripts/db-lint.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vitest": "^2.1.8"
+  }
+}
