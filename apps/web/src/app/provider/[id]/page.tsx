@@ -24,74 +24,69 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
 
   return (
     <main>
+      <div className="pa-eyebrow">Provider profile</div>
       <h1 style={{ marginBottom: 0 }}>
         {provider.name}, {provider.credential}
       </h1>
-      <p style={{ color: "#666", marginTop: "2px" }}>
+      <p style={{ color: "var(--ink-faint)", marginTop: "4px" }}>
         {provider.metro} · {provider.kind === "facility" ? "group practice" : "individual therapist"}
       </p>
 
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", margin: "10px 0" }}>
-        <span style={{ background: "#eef7ee", color: "#2a6", borderRadius: 999, padding: "3px 12px", fontSize: "0.85rem" }}>
-          Passed along {stats.passedCount} times
-        </span>
+      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", margin: "12px 0" }}>
+        <span className="pa-pill pa-pill-passed">Passed along {stats.passedCount} times</span>
       </div>
 
       <section
+        className="pa-card"
         style={{
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          padding: "1rem",
-          background: provider.license.status === "verified" ? "#eef2fb" : "#fff8e6",
+          background: provider.license.status === "verified" ? "var(--sage-soft)" : "var(--sun-soft)",
+          borderColor: provider.license.status === "verified" ? "#cbe3dd" : "#ecd9a6",
           margin: "1rem 0"
         }}
       >
-        <strong>
+        <strong style={{ color: "var(--deep)" }}>
           {provider.license.status === "verified" ? "✓ License verified" : "License verification pending"}
         </strong>
-        <p style={{ margin: "4px 0 0", fontSize: "0.9rem", color: "#444" }}>
+        <p style={{ margin: "4px 0 0", fontSize: "0.9rem", color: "var(--ink-soft)" }}>
           {provider.license.board} · checked {provider.license.checkedAt}
         </p>
       </section>
 
       {freshest && (
-        <p style={{ color: "#2a6", fontSize: "0.9rem" }}>
+        <p style={{ color: "var(--sage-text)", fontWeight: 600, fontSize: "0.9rem" }}>
           A recommender confirmed {provider.name.split(" ")[0]} was still practicing as of {freshest}.
         </p>
       )}
 
-      <section style={{ margin: "1.5rem 0" }}>
-        <h2 style={{ fontSize: "1rem" }}>What people bring this provider up for</h2>
-        <div style={{ display: "grid", gap: "4px" }}>
+      <section style={{ margin: "1.75rem 0" }}>
+        <h2 style={{ fontSize: "1.1rem" }}>What people bring this provider up for</h2>
+        <div style={{ display: "grid", gap: "8px" }}>
           {stats.tagFrequencies.map((entry) => (
-            <div key={entry.tag} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ width: 140, fontSize: "0.85rem" }}>{entry.tag}</span>
-              <div style={{ background: "#e8e8e8", borderRadius: 4, flex: 1, height: 10 }}>
+            <div key={entry.tag} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ width: 140, fontSize: "0.85rem", color: "var(--ink-soft)" }}>{entry.tag}</span>
+              <div style={{ background: "var(--cream)", borderRadius: 999, flex: 1, height: 10 }}>
                 <div
                   style={{
                     width: `${(entry.count / maxCount) * 100}%`,
-                    background: "#5a8",
+                    background: "var(--green)",
                     height: "100%",
-                    borderRadius: 4
+                    borderRadius: 999
                   }}
                 />
               </div>
-              <span style={{ fontSize: "0.8rem", color: "#666" }}>{entry.count}</span>
+              <span style={{ fontSize: "0.8rem", color: "var(--ink-faint)" }}>{entry.count}</span>
             </div>
           ))}
         </div>
       </section>
 
-      <section style={{ margin: "1.5rem 0" }}>
-        <h2 style={{ fontSize: "1rem" }}>Recommendations ({recs.length})</h2>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
+      <section style={{ margin: "1.75rem 0" }}>
+        <h2 style={{ fontSize: "1.1rem" }}>Recommendations ({recs.length})</h2>
+        <div style={{ display: "grid", gap: "1rem" }}>
           {recs.map((rec) => (
-            <blockquote
-              key={rec.id}
-              style={{ margin: 0, borderLeft: "3px solid #ddd", paddingLeft: "12px", color: "#333" }}
-            >
+            <blockquote key={rec.id} className="pa-keystone">
               &ldquo;{rec.quote}&rdquo;
-              <footer style={{ fontSize: "0.8rem", color: "#777" }}>— {rec.recommenderContext}</footer>
+              <footer>— {rec.recommenderContext}</footer>
             </blockquote>
           ))}
         </div>
@@ -99,10 +94,10 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
 
       {similar.length > 0 && (
         <section>
-          <h2 style={{ fontSize: "1rem" }}>See similar providers</h2>
-          <ul>
+          <h2 style={{ fontSize: "1.1rem" }}>See similar providers</h2>
+          <ul style={{ paddingLeft: "1.1rem" }}>
             {similar.map((entry) => (
-              <li key={entry.providerId}>
+              <li key={entry.providerId} style={{ marginBottom: 4 }}>
                 <Link href={`/provider/${entry.providerId}`}>{entry.name}</Link> — {entry.credential}, {entry.loc}
               </li>
             ))}

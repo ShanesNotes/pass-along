@@ -10,20 +10,19 @@ const links = [
 
 export function Nav() {
   return (
-    <nav
-      style={{
-        display: "flex",
-        gap: "1.25rem",
-        padding: "12px 16px",
-        borderBottom: "1px solid #ddd",
-        fontSize: "0.9rem"
-      }}
-    >
-      {links.map((link) => (
-        <Link key={link.href} href={link.href} style={{ color: "#333" }}>
-          {link.label}
+    <header className="pa-nav">
+      <div className="pa-nav-in">
+        <Link className="pa-logo" href="/">
+          Pass Along
         </Link>
-      ))}
-    </nav>
+        <nav className="pa-nav-links">
+          {links.map((link) => (
+            <Link key={link.href} href={link.href}>
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+    </header>
   );
 }

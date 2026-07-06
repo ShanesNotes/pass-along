@@ -38,8 +38,9 @@ const directions: Direction[] = [
 export default function DirectionsPage() {
   return (
     <main>
+      <div className="pa-eyebrow">Pass Along · concept directions</div>
       <h1>Three directions for Pass Along</h1>
-      <p style={{ color: "#555", maxWidth: 640 }}>
+      <p className="pa-sub">
         Pass Along transposes the Angi playbook to mental-health providers, with the trust
         economics inverted: instead of star reviews, background-check badges, and response-time
         stats, the trust signals are lived-experience recommendations (never called
@@ -53,23 +54,24 @@ export default function DirectionsPage() {
           <article
             key={direction.letter}
             id={direction.letter === "B" ? "direction-b" : undefined}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 8,
-              padding: "1.25rem",
-              background: direction.isDefault ? "#fff" : "#f2f2f2"
-            }}
+            className="pa-card"
+            style={direction.isDefault ? { borderColor: "#cbe3dd" } : undefined}
           >
-            <h2 style={{ marginTop: 0 }}>
+            <h2 style={{ marginTop: 0, fontSize: "1.3rem" }}>
               Direction {direction.letter}: {direction.name}
               {direction.isDefault && (
-                <span style={{ fontSize: "0.7rem", marginLeft: 10, color: "#0a6", fontWeight: 600 }}>
-                  DEFAULT RECOMMENDATION
+                <span
+                  className="pa-pill pa-pill-passed"
+                  style={{ marginLeft: 10, verticalAlign: "middle" }}
+                >
+                  Default recommendation
                 </span>
               )}
             </h2>
-            <p style={{ color: "#444" }}>{direction.pitch}</p>
-            <Link href={direction.href}>Walk through this flow →</Link>
+            <p className="pa-sub">{direction.pitch}</p>
+            <Link className="pa-btn ghost" href={direction.href}>
+              Walk through this flow →
+            </Link>
           </article>
         ))}
       </div>
