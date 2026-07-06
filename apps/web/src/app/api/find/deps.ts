@@ -18,6 +18,11 @@ import {
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index";
 import {
+  currentDatedVerifiedCheck,
+  fixtureLicenseCheckForProviderId,
+  type LicenseCheckRecord
+} from "../../../../../../packages/engine/src/verification/index";
+import {
   clarifyQuestionFor,
   understandQuery as defaultUnderstandQuery,
   type UnderstandQueryResult
@@ -66,6 +71,10 @@ interface FindRequestBody {
   readonly kind?: ProviderKind | "either";
   readonly location?: string;
 }
+
+type FindApiCard = Omit<FindResultCard, "verified"> & {
+  readonly license_check?: LicenseCheckRecord;
+};
 
 const DEFAULT_RETRIEVAL_TOP_N = 40;
 const DEFAULT_CARD_LIMIT = 6;
@@ -141,7 +150,9 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       filters,
       topN: DEFAULT_RETRIEVAL_TOP_N
     });
-    const cards = cardsFromMatches(matches, deps.corpus, DEFAULT_CARD_LIMIT);
+    const cards = cardsFromMatches(matches, deps.corpus, DEFAULT_CARD_LIMIT).map(
+      toFindApiCard
+    );
     const latencyMs = Math.max(
       0,
       Math.round((deps.now?.() ?? performance.now()) - startedAt)
@@ -166,7 +177,7 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       understood: UnderstoodQuery;
       source: UnderstandQueryResult["source"];
       unmet: boolean;
-      results: readonly FindResultCard[];
+      results: readonly FindApiCard[];
     });
   };
 }
@@ -221,6 +232,31 @@ function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
   console.warn("find.safety_gate_degraded", {
     reason: gate.tier2.reason
   });
+}
+
+function toFindApiCard(card: FindResultCard): FindApiCard {
+  const licenseCheck = currentDatedVerifiedCheck(
+    fixtureLicenseCheckForProviderId(card.id)
+  );
+  const result = {
+    id: card.id,
+    name: card.name,
+    credential: card.credential,
+    loc: card.loc,
+    passed_count: card.passed_count,
+    tags: card.tags,
+    keystone: card.keystone,
+    why: card.why
+  };
+
+  if (licenseCheck) {
+    return {
+      ...result,
+      license_check: licenseCheck
+    };
+  }
+
+  return result;
 }
 
 function filtersFor(

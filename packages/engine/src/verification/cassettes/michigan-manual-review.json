@@ -1,0 +1,24 @@
+{
+  "state": "MI",
+  "source": "Michigan LARA cassette",
+  "responses": [
+    {
+      "provider_id": "provider_pain_detroit",
+      "license_number": "MI-LMSW-7777",
+      "status_code": 202,
+      "body": {
+        "result": "manual_review",
+        "checked_at": "2026-06-03T09:30:00.000Z"
+      }
+    },
+    {
+      "provider_id": "provider_child_play_detroit",
+      "license_number": "MI-FAC-5010",
+      "status_code": 202,
+      "body": {
+        "result": "manual_review",
+        "checked_at": "2026-06-03T09:35:00.000Z"
+      }
+    }
+  ]
+}

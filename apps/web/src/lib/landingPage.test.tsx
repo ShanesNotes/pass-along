@@ -31,7 +31,11 @@ describe("product landing page", () => {
       passed_count: 3,
       tags: [{ value: "anxiety", freq: 2 }],
       keystone: "A synthetic recommendation keystone for the demo.",
-      verified: true,
+      license_check: {
+        status: "verified",
+        source: "Colorado DORA cassette",
+        checked_at: "2026-06-18T10:00:00.000Z"
+      },
       why: null
     };
     const { fetcher, calls } = mockFindFetch({

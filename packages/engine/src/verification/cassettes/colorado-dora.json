@@ -1,0 +1,36 @@
+{
+  "state": "CO",
+  "source": "Colorado DORA cassette",
+  "responses": [
+    {
+      "provider_id": "provider_teen_denver",
+      "license_number": "CO-LPC-0001",
+      "status_code": 200,
+      "body": {
+        "result": "active",
+        "evidence_url": "https://cassette.example.test/co/dora/licenses/CO-LPC-0001",
+        "checked_at": "2026-06-18T10:00:00.000Z"
+      }
+    },
+    {
+      "provider_id": "provider_family_denver",
+      "license_number": "CO-LMFT-0010",
+      "status_code": 200,
+      "body": {
+        "result": "active",
+        "evidence_url": "https://cassette.example.test/co/dora/licenses/CO-LMFT-0010",
+        "checked_at": "2026-06-12T10:00:00.000Z"
+      }
+    },
+    {
+      "provider_id": "provider_ocd_denver",
+      "license_number": "CO-PSY-0080",
+      "status_code": 200,
+      "body": {
+        "result": "active",
+        "evidence_url": "https://cassette.example.test/co/dora/licenses/CO-PSY-0080",
+        "checked_at": "2026-06-09T10:00:00.000Z"
+      }
+    }
+  ]
+}

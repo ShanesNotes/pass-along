@@ -87,7 +87,16 @@ describe("POST /api/find", () => {
     const body = (await response.json()) as {
       understood: UnderstoodQuery;
       source: string;
-      results: Array<{ name: string; why: null }>;
+      results: Array<{
+        name: string;
+        why: null;
+        license_check?: {
+          status: string;
+          source: string;
+          checked_at: string;
+        };
+        verified?: boolean;
+      }>;
     };
 
     expect(response.status).toBe(200);
@@ -100,8 +109,14 @@ describe("POST /api/find", () => {
     });
     expect(body.results[0]).toMatchObject({
       name: "North Star Teen Therapy",
-      why: null
+      why: null,
+      license_check: {
+        status: "verified",
+        source: "Colorado DORA cassette",
+        checked_at: "2026-06-18T10:00:00.000Z"
+      }
     });
+    expect(body.results.some((result) => "verified" in result)).toBe(false);
 
     expect(harness.events).toHaveLength(1);
     const parsedEvent = EventCatalogSchema.parse(harness.events[0]);
@@ -410,6 +425,34 @@ describe("POST /api/find", () => {
     });
     expect(JSON.stringify(harness.events)).not.toContain(text);
     expect(JSON.stringify(harness.queryRows)).not.toContain(text);
+  });
+
+  test("omits the license badge check for providers without a check row", async () => {
+    const harness = await createHarness(
+      {
+        ANTHROPIC_API_KEY: undefined
+      },
+      {
+        safetyGate: nonDegradedSafetyGate
+      }
+    );
+    const text = "chronic pain support near Detroit, we have insurance";
+    const response = await harness.post({ text });
+    const body = (await response.json()) as {
+      results: Array<{
+        id: string;
+        license_check?: unknown;
+        verified?: boolean;
+      }>;
+    };
+    const result = body.results.find(
+      (entry) => entry.id === "provider_pain_detroit"
+    );
+
+    expect(response.status).toBe(200);
+    expect(result).toBeDefined();
+    expect(result).not.toHaveProperty("license_check");
+    expect(body.results.some((entry) => "verified" in entry)).toBe(false);
   });
 });
 

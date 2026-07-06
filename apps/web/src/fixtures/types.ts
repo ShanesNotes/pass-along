@@ -1,3 +1,5 @@
+import type { LicenseCheckRecord } from "../../../../packages/engine/src/verification/index";
+
 export type Metro = "Denver, CO" | "Austin, TX";
 
 export type ProviderKind = "therapist" | "facility";
@@ -11,7 +13,8 @@ export interface Provider {
   license: {
     status: "verified" | "pending";
     board: string;
-    checkedAt: string; // ISO date
+    checkedAt?: string; // legacy pending placeholder date
+    check?: LicenseCheckRecord;
   };
 }
 

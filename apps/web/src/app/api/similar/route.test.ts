@@ -6,6 +6,12 @@ interface SimilarApiResult {
   readonly recommendationId: string;
   readonly name: string;
   readonly kind: "therapist" | "facility";
+  readonly license_check?: {
+    readonly status: string;
+    readonly source: string;
+    readonly checked_at: string;
+  };
+  readonly verified?: boolean;
 }
 
 describe("GET /api/similar", () => {
@@ -25,6 +31,24 @@ describe("GET /api/similar", () => {
     expect(
       body.results.some((result) => result.providerId === "provider_teen_denver")
     ).toBe(false);
+    expect(body.results.some((result) => "verified" in result)).toBe(false);
+  });
+
+  test("returns dated successful license checks instead of static verified booleans", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/similar?providerId=provider_family_denver")
+    );
+    const body = (await response.json()) as {
+      readonly results: readonly SimilarApiResult[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.results.some((result) => "verified" in result)).toBe(false);
+    expect(
+      body.results
+        .filter((result) => result.license_check)
+        .every((result) => result.license_check?.status === "verified")
+    ).toBe(true);
   });
 
   test("returns fixture-backed neighbors for a recommendation", async () => {

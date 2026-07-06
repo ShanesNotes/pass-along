@@ -1,5 +1,10 @@
+import * as React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  checkedMonthYear,
+  currentDatedVerifiedCheck
+} from "../../../../../../packages/engine/src/verification/index";
 import { providers } from "../../../fixtures/providers";
 import { recommendations } from "../../../fixtures/recommendations";
 import { providerStats, recommendationsForProvider } from "../../../lib/aggregate";
@@ -16,6 +21,7 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
   const stats = providerStats(id, recommendations);
   const recs = recommendationsForProvider(id, recommendations);
   const similar = await fetchSimilarProviders(id);
+  const licenseCheck = currentDatedVerifiedCheck(provider.license.check);
   const freshest = recs.reduce<string | undefined>((latest, rec) => {
     if (!latest || rec.freshnessConfirmedAt > latest) return rec.freshnessConfirmedAt;
     return latest;
@@ -36,21 +42,23 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
         <span className="pa-pill pa-pill-passed">Passed along {stats.passedCount} times</span>
       </div>
 
-      <section
-        className="pa-card"
-        style={{
-          background: provider.license.status === "verified" ? "var(--sage-soft)" : "var(--sun-soft)",
-          borderColor: provider.license.status === "verified" ? "#cbe3dd" : "#ecd9a6",
-          margin: "1rem 0"
-        }}
-      >
-        <strong style={{ color: "var(--deep)" }}>
-          {provider.license.status === "verified" ? "✓ License verified" : "License verification pending"}
-        </strong>
-        <p style={{ margin: "4px 0 0", fontSize: "0.9rem", color: "var(--ink-soft)" }}>
-          {provider.license.board} · checked {provider.license.checkedAt}
-        </p>
-      </section>
+      {licenseCheck && (
+        <section
+          className="pa-card"
+          style={{
+            background: "var(--sage-soft)",
+            borderColor: "#cbe3dd",
+            margin: "1rem 0"
+          }}
+        >
+          <strong style={{ color: "var(--deep)" }}>
+            ✓ Verified · checked {checkedMonthYear(licenseCheck)}
+          </strong>
+          <p style={{ margin: "4px 0 0", fontSize: "0.9rem", color: "var(--ink-soft)" }}>
+            {licenseCheck.source}
+          </p>
+        </section>
+      )}
 
       {freshest && (
         <p style={{ color: "var(--sage-text)", fontWeight: 600, fontSize: "0.9rem" }}>

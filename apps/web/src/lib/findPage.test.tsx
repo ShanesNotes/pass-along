@@ -93,6 +93,76 @@ describe("find page", () => {
     expect(html).not.toContain("We don&rsquo;t have many recommendations");
   });
 
+  test("does not render a verified badge when a result has no dated check record", async () => {
+    const query = "Looking for teen anxiety CBT in Denver, ideally evenings";
+    const { fetcher } = mockFindFetch({
+      understood: understoodFixture(),
+      source: "model",
+      unmet: false,
+      results: [
+        findCard({
+          id: "provider_teen_denver",
+          name: "North Star Teen Therapy",
+          passed_count: 3
+        })
+      ]
+    });
+
+    const response = await postFindQuery(query, fetcher);
+    const html = renderFindScreen({
+      text: query,
+      view: resultsView(query, response)
+    });
+
+    expect(html).toContain("North Star Teen Therapy");
+    expect(html).not.toContain("✓ Verified");
+    expect(html).not.toContain("checked this month");
+  });
+
+  test("renders a verified badge only from a fresh successful check month", async () => {
+    const query = "Looking for teen anxiety CBT in Denver, ideally evenings";
+    const { fetcher } = mockFindFetch({
+      understood: understoodFixture(),
+      source: "model",
+      unmet: false,
+      results: [
+        findCard(
+          {
+            id: "provider_teen_denver",
+            name: "North Star Teen Therapy",
+            passed_count: 3
+          },
+          {
+            status: "verified",
+            source: "Colorado DORA cassette",
+            checked_at: "2026-06-18T10:00:00.000Z"
+          }
+        ),
+        findCard(
+          {
+            id: "provider_old_check",
+            name: "Old Check Counseling",
+            passed_count: 1
+          },
+          {
+            status: "verified",
+            source: "Texas Behavioral Health cassette",
+            checked_at: "2000-01-01T00:00:00.000Z"
+          }
+        )
+      ]
+    });
+
+    const response = await postFindQuery(query, fetcher);
+    const html = renderFindScreen({
+      text: query,
+      view: resultsView(query, response)
+    });
+
+    expect(html).toContain("✓ Verified · checked June 2026");
+    expect(html).not.toContain("checked January 2000");
+  });
+
   test("renders the sparse-corpus fallback when the route returns fewer than three cards", async () => {
     const query = "Looking for chronic pain support near Detroit";
     const { fetcher } = mockFindFetch({
@@ -290,12 +360,15 @@ function resultsView(
   };
 }
 
-function findCard(overrides: {
-  readonly id: string;
-  readonly name: string;
-  readonly passed_count: number;
-}): FindApiCard {
-  return {
+function findCard(
+  overrides: {
+    readonly id: string;
+    readonly name: string;
+    readonly passed_count: number;
+  },
+  licenseCheck?: FindApiCard["license_check"]
+): FindApiCard {
+  const card: FindApiCard = {
     id: overrides.id,
     name: overrides.name,
     credential: "LPC",
@@ -312,7 +385,15 @@ function findCard(overrides: {
       }
     ],
     keystone: "A synthetic recommendation keystone for the demo.",
-    verified: true,
     why: null
   };
+
+  if (licenseCheck) {
+    return {
+      ...card,
+      license_check: licenseCheck
+    };
+  }
+
+  return card;
 }

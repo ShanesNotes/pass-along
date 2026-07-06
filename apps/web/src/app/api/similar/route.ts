@@ -10,6 +10,11 @@ import {
   type SimilarNeighbor,
   type SimilarTarget
 } from "../../../../../../packages/engine/src/retrieval/similar";
+import {
+  currentDatedVerifiedCheck,
+  fixtureLicenseCheckForProviderId,
+  type LicenseCheckRecord
+} from "../../../../../../packages/engine/src/verification/index";
 
 export const runtime = "nodejs";
 
@@ -22,7 +27,7 @@ interface SimilarApiResult {
   readonly kind: "therapist" | "facility";
   readonly tags: readonly string[];
   readonly keystone: string;
-  readonly verified: boolean;
+  readonly license_check?: LicenseCheckRecord;
   readonly score: number;
   readonly sameMetro: boolean;
 }
@@ -104,7 +109,10 @@ function trimmedParam(url: URL, name: string): string | undefined {
 }
 
 function toApiResult(neighbor: SimilarNeighbor): SimilarApiResult {
-  return {
+  const licenseCheck = currentDatedVerifiedCheck(
+    fixtureLicenseCheckForProviderId(neighbor.providerId)
+  );
+  const result = {
     providerId: neighbor.providerId,
     recommendationId: neighbor.recommendationId,
     name: neighbor.providerName,
@@ -113,10 +121,18 @@ function toApiResult(neighbor: SimilarNeighbor): SimilarApiResult {
     kind: neighbor.kind,
     tags: neighbor.tags,
     keystone: neighbor.keystone,
-    verified: neighbor.verified,
     score: neighbor.score,
     sameMetro: neighbor.sameMetro
   };
+
+  if (licenseCheck) {
+    return {
+      ...result,
+      license_check: licenseCheck
+    };
+  }
+
+  return result;
 }
 
 function json(body: unknown, status = 200): Response {

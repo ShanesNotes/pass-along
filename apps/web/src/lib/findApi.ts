@@ -1,4 +1,5 @@
 import type { UnderstoodQuery } from "../../../../packages/core/src/index";
+import type { LicenseCheckRecord } from "../../../../packages/engine/src/verification/index";
 
 export type FindFetch = typeof fetch;
 export type UnderstandSource = "model" | "fallback";
@@ -16,7 +17,7 @@ export interface FindApiCard {
   readonly passed_count: number;
   readonly tags: readonly FindApiTag[];
   readonly keystone: string;
-  readonly verified: boolean;
+  readonly license_check?: LicenseCheckRecord;
   readonly why: string | null;
 }
 
@@ -141,6 +142,8 @@ function parseFindCard(value: unknown): FindApiCard {
     throw new Error("Find result card why must be null or a string");
   }
 
+  const licenseCheck = parseLicenseCheck(value.license_check);
+
   return {
     id: stringField(value, "id"),
     name: stringField(value, "name"),
@@ -149,8 +152,41 @@ function parseFindCard(value: unknown): FindApiCard {
     passed_count: numberField(value, "passed_count"),
     tags: tags.map(parseFindTag),
     keystone: stringField(value, "keystone"),
-    verified: booleanField(value, "verified"),
+    ...(licenseCheck ? { license_check: licenseCheck } : {}),
     why
+  };
+}
+
+function parseLicenseCheck(value: unknown): LicenseCheckRecord | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    throw new Error("Find result license check must be an object");
+  }
+
+  const status = value.status;
+  const evidenceUrl = value.evidence_url;
+
+  if (
+    status !== "verified" &&
+    status !== "not_found" &&
+    status !== "expired" &&
+    status !== "manual_review"
+  ) {
+    throw new Error("Find result license check status is invalid");
+  }
+
+  if (evidenceUrl !== undefined && typeof evidenceUrl !== "string") {
+    throw new Error("Find result license check evidence_url must be a string");
+  }
+
+  return {
+    status,
+    source: stringField(value, "source"),
+    ...(evidenceUrl ? { evidence_url: evidenceUrl } : {}),
+    checked_at: stringField(value, "checked_at")
   };
 }
 

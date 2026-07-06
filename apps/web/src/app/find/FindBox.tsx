@@ -224,6 +224,7 @@ function Chip({ label, onRemove }: { readonly label: string; readonly onRemove: 
 
 function ResultCard({ card }: { readonly card: FindApiCard }) {
   const similar = useSimilarProviderRows(card.id);
+  const licenseBadge = verifiedLicenseBadge(card.license_check);
 
   return (
     <article className="pa-card">
@@ -234,12 +235,11 @@ function ResultCard({ card }: { readonly card: FindApiCard }) {
           </h3>
           <p style={{ margin: "3px 0 0", color: "var(--ink-faint)", fontSize: "0.9rem" }}>{card.loc}</p>
         </div>
-        <span className="pa-pill-verified">✓ Verified · checked this month</span>
+        {licenseBadge && <span className="pa-pill-verified">{licenseBadge}</span>}
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 10 }}>
         <span className="pa-pill pa-pill-passed">Passed along {card.passed_count} times</span>
-        {card.verified && <span className="pa-pill pa-pill-like">✳ From people like you</span>}
       </div>
 
       <div className="pa-section-label">What people talked about</div>
@@ -278,6 +278,32 @@ function ResultCard({ card }: { readonly card: FindApiCard }) {
       )}
     </article>
   );
+}
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+function verifiedLicenseBadge(
+  check: FindApiCard["license_check"] | undefined
+): string | undefined {
+  if (!check || check.status !== "verified") {
+    return undefined;
+  }
+
+  const checkedAt = Date.parse(check.checked_at);
+
+  if (!Number.isFinite(checkedAt)) {
+    return undefined;
+  }
+
+  if (Date.now() - checkedAt > ONE_YEAR_MS) {
+    return undefined;
+  }
+
+  return `✓ Verified · checked ${new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(checkedAt))}`;
 }
 
 interface SimilarProviderRow {

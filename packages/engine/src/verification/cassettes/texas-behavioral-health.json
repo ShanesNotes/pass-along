@@ -1,0 +1,44 @@
+{
+  "state": "TX",
+  "source": "Texas Behavioral Health cassette",
+  "responses": [
+    {
+      "provider_id": "provider_postpartum_austin",
+      "license_number": "TX-LCSW-0200",
+      "status_code": 200,
+      "body": {
+        "result": "active",
+        "evidence_url": "https://cassette.example.test/tx/bhec/licenses/TX-LCSW-0200",
+        "checked_at": "2026-06-20T12:00:00.000Z"
+      }
+    },
+    {
+      "provider_id": "provider_emdr_austin",
+      "license_number": "TX-FAC-0300",
+      "status_code": 200,
+      "body": {
+        "result": "active",
+        "evidence_url": "https://cassette.example.test/tx/hhs/facilities/TX-FAC-0300",
+        "checked_at": "2026-06-16T12:00:00.000Z"
+      }
+    },
+    {
+      "provider_id": "provider_missing_texas",
+      "license_number": "TX-LCSW-4040",
+      "status_code": 404,
+      "body": {
+        "result": "not_found"
+      }
+    },
+    {
+      "provider_id": "provider_expired_texas",
+      "license_number": "TX-LPC-1999",
+      "status_code": 200,
+      "body": {
+        "result": "expired",
+        "evidence_url": "https://cassette.example.test/tx/bhec/licenses/TX-LPC-1999",
+        "checked_at": "2026-05-02T12:00:00.000Z"
+      }
+    }
+  ]
+}
