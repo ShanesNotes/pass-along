@@ -70,6 +70,23 @@ waves:
         status: shipped # d39711e + audit corrections e878fd9
         depends: [PA-007]
 
+  polish-wave:
+    note: direction-agnostic pre-meeting polish (2026-07-06 afternoon)
+    tickets:
+      - id: PA-010
+        packet: design pass (v2 experience-proposal language)
+        status: shipped # 10086e4
+        route: sonnet-agent
+      - id: PA-011
+        packet: live find demo (real pipeline on fixtures)
+        status: shipped # 61f9ada + 66ced04
+        route: codex
+      - id: PA-012
+        packet: L1-S6
+        title: See-similar + typeahead on real data
+        status: shipped # 9e0c665 + ed89336
+        route: codex
+
   wave-4-plus:
     note: "L1-S3..L5-S3 enqueue after the meeting resolves discovery unknowns; wave map in spec §5 stands."
     tickets: []
