@@ -40,13 +40,13 @@ waves:
       - id: PA-004
         packet: L0-S4
         title: LLM adapter + prompt registry + eval runner
-        status: in_flight
+        status: shipped # 9a20c6f + 35038aa + e878fd9
         route: codex
         depends: [PA-002]
       - id: PA-005
         packet: L0-S5
         title: Orchestration rail (jobs/events, stubbed handlers)
-        status: queued # serialized after PA-004 (shared packages/engine)
+        status: shipped # beb14e5
         route: codex
         depends: [PA-003, PA-004]
       - id: PA-006
@@ -62,12 +62,12 @@ waves:
       - id: PA-007
         packet: L1-S1
         title: Embeddings + raw vector find
-        status: queued
+        status: shipped # ba2a6cb
         depends: [PA-003, PA-004]
       - id: PA-008
         packet: L1-S2
         title: Safety gate on find path (SHIP-BLOCKER; safety-only PR)
-        status: queued
+        status: shipped # d39711e + audit corrections e878fd9
         depends: [PA-007]
 
   wave-4-plus:
