@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { providers } from "../../fixtures/providers";
+import { useEffect, useState } from "react";
 import { Stub } from "../../components/Stub";
 
 const WHO_OPTIONS = ["myself", "a family member", "a friend", "someone I referred as a professional"];
@@ -15,18 +14,62 @@ const PIPELINE_STEPS = [
 
 export function PassClient() {
   const [providerQuery, setProviderQuery] = useState("");
-  const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderMatch | undefined>(undefined);
+  const [matches, setMatches] = useState<readonly ProviderMatch[]>([]);
+  const [searchingProviders, setSearchingProviders] = useState(false);
   const [who, setWho] = useState<string | undefined>(undefined);
   const [story, setStory] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  const matches = useMemo(() => {
-    if (providerQuery.trim().length === 0) return [];
-    const needle = providerQuery.trim().toLowerCase();
-    return providers.filter((provider) => provider.name.toLowerCase().includes(needle)).slice(0, 5);
-  }, [providerQuery]);
+  useEffect(() => {
+    if (selectedProvider) {
+      setMatches([]);
+      setSearchingProviders(false);
+      return;
+    }
 
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
+    const trimmed = providerQuery.trim();
+
+    if (trimmed.length === 0) {
+      setMatches([]);
+      setSearchingProviders(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      setSearchingProviders(true);
+      void fetch(`/api/typeahead?q=${encodeURIComponent(trimmed)}`, {
+        signal: controller.signal
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return [];
+          }
+
+          return parseTypeaheadResponse(await response.json());
+        })
+        .then((results) => {
+          setMatches(results);
+        })
+        .catch((error: unknown) => {
+          if (!isAbortError(error)) {
+            setMatches([]);
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setSearchingProviders(false);
+          }
+        });
+    }, 180);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [providerQuery, selectedProvider]);
+
   const canSubmit = Boolean(selectedProvider) && Boolean(who) && story.trim().length >= 20;
 
   if (submitted) {
@@ -59,20 +102,25 @@ export function PassClient() {
             id="provider-search"
             value={selectedProvider ? selectedProvider.name : providerQuery}
             onChange={(event) => {
-              setSelectedProviderId(undefined);
+              setSelectedProvider(undefined);
               setProviderQuery(event.target.value);
             }}
             placeholder="Start typing a provider name..."
             style={{ width: "100%", padding: "8px", boxSizing: "border-box", marginTop: "6px" }}
           />
         </div>
+        {searchingProviders && !selectedProvider && (
+          <p style={{ color: "#666", fontSize: "0.85rem", margin: "4px 0 0" }}>
+            Searching providers...
+          </p>
+        )}
         {matches.length > 0 && !selectedProvider && (
           <ul style={{ listStyle: "none", padding: 0, border: "1px solid #ddd", borderRadius: 6, marginTop: "4px" }}>
             {matches.map((provider) => (
               <li key={provider.id}>
                 <button
                   onClick={() => {
-                    setSelectedProviderId(provider.id);
+                    setSelectedProvider(provider);
                     setProviderQuery("");
                   }}
                   style={{
@@ -84,7 +132,7 @@ export function PassClient() {
                     cursor: "pointer"
                   }}
                 >
-                  {provider.name} — {provider.credential}, {provider.metro}
+                  {provider.name} — {provider.credential}, {provider.loc}
                 </button>
               </li>
             ))}
@@ -170,4 +218,53 @@ function PipelineStrip({ activeIndex }: { activeIndex?: number }) {
       ))}
     </div>
   );
+}
+
+interface ProviderMatch {
+  readonly id: string;
+  readonly name: string;
+  readonly credential: string;
+  readonly loc: string;
+}
+
+function parseTypeaheadResponse(value: unknown): readonly ProviderMatch[] {
+  if (!isRecord(value) || !Array.isArray(value.results)) {
+    return [];
+  }
+
+  return value.results.map(parseProviderMatch).filter(isProviderMatch);
+}
+
+function parseProviderMatch(value: unknown): ProviderMatch | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const id = value.id;
+  const name = value.name;
+  const credential = value.credential;
+  const loc = value.loc;
+
+  if (
+    typeof id !== "string" ||
+    typeof name !== "string" ||
+    typeof credential !== "string" ||
+    typeof loc !== "string"
+  ) {
+    return undefined;
+  }
+
+  return { id, name, credential, loc };
+}
+
+function isProviderMatch(value: ProviderMatch | undefined): value is ProviderMatch {
+  return value !== undefined;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

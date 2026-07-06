@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { providers } from "../../../fixtures/providers";
 import { recommendations } from "../../../fixtures/recommendations";
-import { providerStats, recommendationsForProvider, similarProviders } from "../../../lib/aggregate";
+import { providerStats, recommendationsForProvider } from "../../../lib/aggregate";
 
 export function generateStaticParams() {
   return providers.map((provider) => ({ id: provider.id }));
@@ -15,7 +15,7 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
 
   const stats = providerStats(id, recommendations);
   const recs = recommendationsForProvider(id, recommendations);
-  const similar = similarProviders(id, providers, recommendations, 3);
+  const similar = await fetchSimilarProviders(id);
   const freshest = recs.reduce<string | undefined>((latest, rec) => {
     if (!latest || rec.freshnessConfirmedAt > latest) return rec.freshnessConfirmedAt;
     return latest;
@@ -102,8 +102,8 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
           <h2 style={{ fontSize: "1rem" }}>See similar providers</h2>
           <ul>
             {similar.map((entry) => (
-              <li key={entry.id}>
-                <Link href={`/provider/${entry.id}`}>{entry.name}</Link> — {entry.credential}, {entry.metro}
+              <li key={entry.providerId}>
+                <Link href={`/provider/${entry.providerId}`}>{entry.name}</Link> — {entry.credential}, {entry.loc}
               </li>
             ))}
           </ul>
@@ -111,4 +111,88 @@ export default async function ProviderProfilePage({ params }: { params: Promise<
       )}
     </main>
   );
+}
+
+interface SimilarProvider {
+  readonly providerId: string;
+  readonly name: string;
+  readonly credential: string;
+  readonly loc: string;
+}
+
+async function fetchSimilarProviders(
+  providerId: string
+): Promise<readonly SimilarProvider[]> {
+  try {
+    const response = await fetch(similarUrl(providerId), {
+      next: { revalidate: 60 }
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const body: unknown = await response.json();
+    return parseSimilarProviders(body);
+  } catch {
+    return [];
+  }
+}
+
+function similarUrl(providerId: string): string {
+  const url = new URL("/api/similar", selfBaseUrl());
+  url.searchParams.set("providerId", providerId);
+  return url.toString();
+}
+
+function selfBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  return "http://localhost:3000";
+}
+
+function parseSimilarProviders(value: unknown): readonly SimilarProvider[] {
+  if (!isRecord(value) || !Array.isArray(value.results)) {
+    return [];
+  }
+
+  return value.results.map(parseSimilarProvider).filter(isSimilarProvider);
+}
+
+function parseSimilarProvider(value: unknown): SimilarProvider | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const providerId = value.providerId;
+  const name = value.name;
+  const credential = value.credential;
+  const loc = value.loc;
+
+  if (
+    typeof providerId !== "string" ||
+    typeof name !== "string" ||
+    typeof credential !== "string" ||
+    typeof loc !== "string"
+  ) {
+    return undefined;
+  }
+
+  return { providerId, name, credential, loc };
+}
+
+function isSimilarProvider(
+  value: SimilarProvider | undefined
+): value is SimilarProvider {
+  return value !== undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -246,6 +246,8 @@ function Chip({ label, onRemove }: { readonly label: string; readonly onRemove: 
 }
 
 function ResultCard({ card }: { readonly card: FindApiCard }) {
+  const similar = useSimilarProviderRows(card.id);
+
   return (
     <article style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1rem", background: "#fff" }}>
       <h3 style={{ marginBottom: 0 }}>
@@ -280,8 +282,105 @@ function ResultCard({ card }: { readonly card: FindApiCard }) {
           <p style={{ margin: "4px 0 0", fontSize: "0.9rem" }}>{card.why}</p>
         </div>
       )}
+
+      {similar.length > 0 && (
+        <div style={{ borderTop: "1px solid #eee", marginTop: "10px", paddingTop: "8px" }}>
+          <strong style={{ fontSize: "0.85rem" }}>See similar</strong>
+          <ul style={{ margin: "4px 0 0", paddingLeft: "1.1rem" }}>
+            {similar.map((entry) => (
+              <li key={entry.providerId} style={{ fontSize: "0.9rem" }}>
+                <Link href={`/provider/${entry.providerId}`}>{entry.name}</Link> — {entry.credential}, {entry.loc}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </article>
   );
+}
+
+interface SimilarProviderRow {
+  readonly providerId: string;
+  readonly name: string;
+  readonly credential: string;
+  readonly loc: string;
+}
+
+function useSimilarProviderRows(providerId: string): readonly SimilarProviderRow[] {
+  const [rows, setRows] = React.useState<readonly SimilarProviderRow[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const response = await fetch(
+          `/api/similar?providerId=${encodeURIComponent(providerId)}`
+        );
+
+        if (!response.ok) {
+          if (!cancelled) setRows([]);
+          return;
+        }
+
+        const body: unknown = await response.json();
+        const parsed = parseSimilarResponse(body);
+
+        if (!cancelled) {
+          setRows(parsed);
+        }
+      } catch {
+        if (!cancelled) {
+          setRows([]);
+        }
+      }
+    }
+
+    setRows([]);
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [providerId]);
+
+  return rows;
+}
+
+function parseSimilarResponse(value: unknown): readonly SimilarProviderRow[] {
+  if (!isRecord(value) || !Array.isArray(value.results)) {
+    return [];
+  }
+
+  return value.results.map(parseSimilarRow).filter(isSimilarProviderRow);
+}
+
+function parseSimilarRow(value: unknown): SimilarProviderRow | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const providerId = value.providerId;
+  const name = value.name;
+  const credential = value.credential;
+  const loc = value.loc;
+
+  if (
+    typeof providerId !== "string" ||
+    typeof name !== "string" ||
+    typeof credential !== "string" ||
+    typeof loc !== "string"
+  ) {
+    return undefined;
+  }
+
+  return { providerId, name, credential, loc };
+}
+
+function isSimilarProviderRow(
+  value: SimilarProviderRow | undefined
+): value is SimilarProviderRow {
+  return value !== undefined;
 }
 
 function CrisisCard({
@@ -316,4 +415,8 @@ function CrisisCard({
       <button onClick={onBack}>Back to find</button>
     </section>
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
