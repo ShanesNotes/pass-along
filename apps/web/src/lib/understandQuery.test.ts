@@ -1,30 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { understandQuery } from "./understandQuery";
+import {
+  facetsFromUnderstood,
+  removeFacetFromQueryText
+} from "./understandQuery";
 
-describe("understandQuery", () => {
-  it("flags crisis language before anything else", () => {
-    const result = understandQuery("I don't know what to do, I want to end my life");
-    expect(result.kind).toBe("crisis");
+describe("understood display helpers", () => {
+  it("maps server understood JSON into display facets", () => {
+    const facets = facetsFromUnderstood({
+      issues: [{ value: "anxiety", vocab: true, confidence: 0.9 }],
+      population: "teen",
+      kind: "therapist",
+      preferences: {
+        modality: [{ value: "cbt", vocab: true, confidence: 0.8 }],
+        logistics: ["evenings"],
+        style: ["warm"]
+      },
+      confidence: 0.85
+    });
+
+    expect(facets).toEqual({
+      issues: ["anxiety"],
+      population: "teen",
+      prefers: ["cbt", "evenings", "warm"]
+    });
   });
 
-  it("asks a clarifying question for vague or short input", () => {
-    const result = understandQuery("help");
-    expect(result.kind).toBe("low-confidence");
-  });
-
-  it("extracts issue, population, and preference facets", () => {
-    const result = understandQuery(
-      "Looking for someone for my teenager's anxiety, ideally evening appointments"
-    );
-    expect(result.kind).toBe("understood");
-    if (result.kind !== "understood") throw new Error("expected understood");
-    expect(result.facets.issues).toContain("anxiety");
-    expect(result.facets.population).toBe("teen");
-    expect(result.facets.prefers).toContain("evenings");
-  });
-
-  it("does not treat crisis keywords as understood facets", () => {
-    const result = understandQuery("I've been having panic attacks and thoughts of suicide");
-    expect(result.kind).toBe("crisis");
+  it("removes a selected server facet before re-querying", () => {
+    expect(
+      removeFacetFromQueryText(
+        "Looking for trauma PTSD support for a teenager with telehealth",
+        "issue",
+        "trauma_ptsd"
+      )
+    ).toBe("Looking for support for a teenager with telehealth");
+    expect(
+      removeFacetFromQueryText(
+        "Looking for anxiety support for a teenager with telehealth",
+        "population",
+        "teen"
+      )
+    ).toBe("Looking for anxiety support for a with telehealth");
+    expect(
+      removeFacetFromQueryText(
+        "Looking for anxiety support for a teenager with telehealth",
+        "prefer",
+        "telehealth"
+      )
+    ).toBe("Looking for anxiety support for a teenager with");
   });
 });

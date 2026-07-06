@@ -6,7 +6,6 @@ import {
   corpusTags,
   createInMemoryVectorStoreFromCorpus,
   findMatches,
-  inferTagFiltersFromText,
   type FindResultCard,
   type ProviderKind,
   type RetrievalCorpus,
@@ -18,6 +17,11 @@ import {
   safetyGate as defaultSafetyGate,
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index";
+import {
+  clarifyQuestionFor,
+  understandQuery as defaultUnderstandQuery,
+  type UnderstandQueryResult
+} from "../../../../../../packages/engine/src/understand/index";
 import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index";
 import type {
   EventCatalog,
@@ -35,7 +39,7 @@ export interface FindEventsPort {
 
 export interface QueryAuditRow {
   readonly query_hash: string;
-  readonly understood: null;
+  readonly understood: UnderstoodQuery;
 }
 
 export interface QueryAuditPort {
@@ -49,6 +53,7 @@ export interface FindRouteDeps {
   readonly events: FindEventsPort;
   readonly queries?: QueryAuditPort;
   readonly safetyGate?: (text: string) => Promise<SafetyGateResult>;
+  readonly understand?: (text: string) => Promise<UnderstandQueryResult>;
   readonly embed: (text: string) => Promise<{
     readonly vector: readonly number[];
     readonly metadata: EmbeddingMetadata;
@@ -97,9 +102,39 @@ export function createFindPostHandler(deps: FindRouteDeps) {
     warnIfSafetyGateDegraded(gate);
 
     const queryHash = sha256(body.text);
-    const embedding = await deps.embed(body.text);
-    const filters = filtersFor(body, deps.corpus);
-    const understoodJson = understoodForEvent(body, filters.tags ?? []);
+    const [understanding, embedding] = await Promise.all([
+      (deps.understand ?? defaultRouteUnderstand(env))(body.text),
+      deps.embed(body.text)
+    ]);
+    const understoodJson = understoodWithRequestOverrides(
+      understanding.understood,
+      body
+    );
+
+    if (understoodJson.confidence < 0.55) {
+      const latencyMs = Math.max(
+        0,
+        Math.round((deps.now?.() ?? performance.now()) - startedAt)
+      );
+
+      await recordFindAttempt({
+        deps,
+        queryHash,
+        understood: understoodJson,
+        resultCount: 0,
+        latencyMs,
+        degraded: gate.degraded,
+        understoodSource: understanding.source
+      });
+
+      return json({
+        understood: understoodJson,
+        source: understanding.source,
+        clarify: clarifyQuestionFor(body.text, understoodJson)
+      });
+    }
+
+    const filters = filtersFor(body, deps.corpus, understoodJson);
     const { matches, unmet } = await findMatches({
       store: deps.store,
       vector: embedding.vector,
@@ -112,27 +147,24 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       Math.round((deps.now?.() ?? performance.now()) - startedAt)
     );
 
-    await deps.queries?.upsert({
-      query_hash: queryHash,
-      understood: null
-    });
-    await deps.events.emit({
-      type: "find.performed",
-      payload: {
-        understood_json: understoodJson,
-        query_hash_sha256: queryHash,
-        result_count: cards.length,
-        latency_ms: latencyMs,
-        ...(gate.degraded ? { degraded: true } : {})
-      }
+    await recordFindAttempt({
+      deps,
+      queryHash,
+      understood: understoodJson,
+      resultCount: cards.length,
+      latencyMs,
+      degraded: gate.degraded,
+      understoodSource: understanding.source
     });
 
     return json({
-      understood: null,
+      understood: understoodJson,
+      source: understanding.source,
       unmet,
       results: cards
     } satisfies {
-      understood: null;
+      understood: UnderstoodQuery;
+      source: UnderstandQueryResult["source"];
       unmet: boolean;
       results: readonly FindResultCard[];
     });
@@ -164,6 +196,7 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
     store,
     embed,
     safetyGate: (text) => defaultSafetyGate(text, { env: process.env }),
+    understand: (text) => defaultUnderstandQuery(text, { env: process.env }),
     events: {
       async emit() {
         return undefined;
@@ -174,6 +207,10 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
 
 function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
   return (text: string) => defaultSafetyGate(text, { env });
+}
+
+function defaultRouteUnderstand(env: NodeJS.ProcessEnv) {
+  return (text: string) => defaultUnderstandQuery(text, { env });
 }
 
 function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
@@ -188,9 +225,10 @@ function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
 
 function filtersFor(
   body: FindRequestBody,
-  corpus: RetrievalCorpus
+  corpus: RetrievalCorpus,
+  understood: UnderstoodQuery
 ): RetrievalFilters {
-  const tags = inferTagFiltersFromText(body.text, corpusTags(corpus));
+  const tags = tagsForUnderstood(understood, corpusTags(corpus));
   const filters: {
     kind?: ProviderKind | "either";
     location?: string;
@@ -199,10 +237,14 @@ function filtersFor(
 
   if (body.kind !== undefined) {
     filters.kind = body.kind;
+  } else if (understood.kind !== "either") {
+    filters.kind = understood.kind;
   }
 
   if (body.location !== undefined) {
     filters.location = body.location;
+  } else if (understood.location !== undefined) {
+    filters.location = understood.location.text;
   }
 
   if (tags.length > 0) {
@@ -212,28 +254,108 @@ function filtersFor(
   return filters;
 }
 
-function understoodForEvent(
-  body: FindRequestBody,
-  tags: readonly string[]
+function understoodWithRequestOverrides(
+  understood: UnderstoodQuery,
+  body: FindRequestBody
 ): UnderstoodQuery {
-  const understood: UnderstoodQuery = {
-    issues: tags.map((tag) => ({
-      value: tag,
-      vocab: true,
-      confidence: 0.7
-    })),
-    kind: body.kind ?? "either",
-    preferences: {},
-    confidence: tags.length > 0 || body.location !== undefined ? 0.6 : 0.3
+  const result: UnderstoodQuery = {
+    ...understood,
+    preferences: {
+      ...understood.preferences
+    },
+    kind: body.kind ?? understood.kind
   };
 
   if (body.location !== undefined && body.location.trim().length > 0) {
-    understood.location = {
+    result.location = {
       text: body.location.trim()
     };
   }
 
-  return understood;
+  return result;
+}
+
+function tagsForUnderstood(
+  understood: UnderstoodQuery,
+  availableTags: readonly string[]
+): readonly string[] {
+  const available = new Set(availableTags.map(normalizeTag));
+  const candidates = [
+    ...understood.issues.flatMap((issue) => corpusTagCandidates(issue.value)),
+    ...(understood.population
+      ? corpusTagCandidates(understood.population)
+      : []),
+    ...(understood.preferences.modality ?? []).flatMap((modality) =>
+      corpusTagCandidates(modality.value)
+    ),
+    ...(understood.preferences.logistics ?? []).flatMap(corpusTagCandidates),
+    ...(understood.preferences.style ?? []).flatMap(corpusTagCandidates)
+  ];
+  const tags = candidates.filter((candidate) =>
+    available.has(normalizeTag(candidate))
+  );
+
+  return [...new Set(tags)];
+}
+
+function corpusTagCandidates(value: string): readonly string[] {
+  const explicit: Record<string, readonly string[]> = {
+    trauma_ptsd: ["trauma", "ptsd"],
+    eating_disorders: ["eating disorder"],
+    substance_use: ["substance use"],
+    chronic_illness: ["chronic illness"],
+    relationship_issues: ["relationship"],
+    stress_burnout: ["stress", "burnout"],
+    gender_identity: ["gender identity"],
+    family_conflict: ["family"],
+    life_transitions: ["life transitions"],
+    chronic_pain: ["chronic pain"],
+    social_anxiety: ["social anxiety"],
+    lgbtq_plus: ["lgbtq"],
+    new_parent: ["new parent"],
+    older_adult: ["adult"],
+    college_student: ["college student"],
+    first_responder: ["first responder"],
+    sliding_scale: ["sliding scale"],
+    exposure_erp: ["exposure erp"],
+    family_systems: ["family systems"],
+    mindfulness_based: ["mindfulness"],
+    medication_management: ["medication management"],
+    ketamine_assisted: ["ketamine"],
+    motivational_interviewing: ["motivational interviewing"]
+  };
+
+  return explicit[value] ?? [value.replaceAll("_", " ")];
+}
+
+function normalizeTag(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9+]+/gu, " ").trim();
+}
+
+async function recordFindAttempt(input: {
+  readonly deps: FindRouteDeps;
+  readonly queryHash: string;
+  readonly understood: UnderstoodQuery;
+  readonly resultCount: number;
+  readonly latencyMs: number;
+  readonly degraded: boolean;
+  readonly understoodSource: UnderstandQueryResult["source"];
+}): Promise<void> {
+  await input.deps.queries?.upsert({
+    query_hash: input.queryHash,
+    understood: input.understood
+  });
+  await input.deps.events.emit({
+    type: "find.performed",
+    payload: {
+      understood_json: input.understood,
+      query_hash_sha256: input.queryHash,
+      result_count: input.resultCount,
+      latency_ms: input.latencyMs,
+      understood_source: input.understoodSource,
+      ...(input.degraded ? { degraded: true } : {})
+    }
+  });
 }
 
 async function readJson(request: Request): Promise<unknown> {

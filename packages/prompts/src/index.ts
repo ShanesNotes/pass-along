@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+export { UNDERSTAND_2_PROMPT } from "./understand2.js";
 
 export type PromptRegistryEntry = {
   id: string;
@@ -21,6 +22,12 @@ export const PROMPT_REGISTRY = {
     id: "understand",
     version: "1",
     filePath: join(promptRoot, "understand", "1.md"),
+    goldensPath: join(promptRoot, "understand", "goldens.jsonl")
+  },
+  "understand@2": {
+    id: "understand",
+    version: "2",
+    filePath: join(promptRoot, "understand", "2.md"),
     goldensPath: join(promptRoot, "understand", "goldens.jsonl")
   },
   "crisis_gate@1": {

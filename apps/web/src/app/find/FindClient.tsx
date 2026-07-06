@@ -3,10 +3,10 @@
 import * as React from "react";
 import { postFindQuery, type FindApiResponse } from "../../lib/findApi";
 import {
+  emptyFacets,
+  facetsFromUnderstood,
   removeFacetFromQueryText,
-  understandQuery,
   type FacetKind,
-  type Facets
 } from "../../lib/understandQuery";
 import { FindScreen, type FindView } from "./FindScreen";
 
@@ -25,9 +25,8 @@ export function FindClient() {
       return;
     }
 
-    const facets = displayFacetsForQuery(trimmed);
     setText(trimmed);
-    setView({ kind: "loading", queryText: trimmed, facets });
+    setView({ kind: "loading", queryText: trimmed, facets: emptyFacets() });
 
     try {
       const response = await postFindQuery(trimmed);
@@ -36,7 +35,7 @@ export function FindClient() {
       setView({
         kind: "error",
         queryText: trimmed,
-        facets,
+        facets: emptyFacets(),
         message: "Search is unavailable right now. Nothing was stored."
       });
     }
@@ -58,6 +57,16 @@ export function FindClient() {
     void submitSearch(amendedText);
   }
 
+  function answerClarifyChip(value: string) {
+    if (view.kind !== "clarify") {
+      return;
+    }
+
+    const enrichedText = enrichTextWithClarifyChip(view.queryText, value);
+    setText(enrichedText);
+    void submitSearch(enrichedText);
+  }
+
   return (
     <FindScreen
       text={text}
@@ -67,6 +76,7 @@ export function FindClient() {
       onCrisisExample={() => void submitSearch(CRISIS_EXAMPLE_TEXT)}
       onBack={() => setView({ kind: "input" })}
       onRemoveChip={removeChip}
+      onClarifyChip={answerClarifyChip}
     />
   );
 }
@@ -83,27 +93,30 @@ function viewFromFindResponse(
     };
   }
 
+  if ("clarify" in response) {
+    return {
+      kind: "clarify",
+      queryText,
+      facets: facetsFromUnderstood(response.understood),
+      question: response.clarify.question,
+      chips: response.clarify.chips
+    };
+  }
+
   return {
     kind: "results",
     queryText,
-    facets: displayFacetsForQuery(queryText),
+    facets: facetsFromUnderstood(response.understood),
     cards: response.results
   };
 }
 
-function displayFacetsForQuery(queryText: string): Facets {
-  // Display-side echo pending L1-S3: /api/find v0 returns understood:null,
-  // so chips are derived locally for UI affordances only. The raw query is
-  // sent only to POST /api/find, and chips never choose results client-side.
-  const understood = understandQuery(queryText);
+function enrichTextWithClarifyChip(queryText: string, value: string): string {
+  const readable = value.replaceAll("_", " ");
 
-  if (understood.kind !== "understood") {
-    return emptyFacets();
+  if (queryText.toLowerCase().includes(readable.toLowerCase())) {
+    return queryText;
   }
 
-  return understood.facets;
-}
-
-function emptyFacets(): Facets {
-  return { issues: [], population: undefined, prefers: [] };
+  return `${queryText} ${readable}`.trim();
 }

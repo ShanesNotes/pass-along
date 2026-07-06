@@ -24,6 +24,13 @@ export type FindView =
       readonly support: CrisisSupport;
     }
   | {
+      readonly kind: "clarify";
+      readonly queryText: string;
+      readonly facets: Facets;
+      readonly question: string;
+      readonly chips: readonly string[];
+    }
+  | {
       readonly kind: "results";
       readonly queryText: string;
       readonly facets: Facets;
@@ -38,6 +45,7 @@ export interface FindScreenProps {
   readonly onCrisisExample: () => void;
   readonly onBack: () => void;
   readonly onRemoveChip: (kind: FacetKind, value: string) => void;
+  readonly onClarifyChip: (value: string) => void;
 }
 
 export function FindScreen({
@@ -47,7 +55,8 @@ export function FindScreen({
   onSubmit,
   onCrisisExample,
   onBack,
-  onRemoveChip
+  onRemoveChip,
+  onClarifyChip
 }: FindScreenProps) {
   const isLoading = view.kind === "loading";
 
@@ -96,12 +105,47 @@ export function FindScreen({
             </div>
           )}
 
+          {view.kind === "clarify" && (
+            <Clarify
+              question={view.question}
+              chips={view.chips}
+              onClarifyChip={onClarifyChip}
+            />
+          )}
+
           {view.kind === "results" && (
             <Results facets={view.facets} cards={view.cards} onRemoveChip={onRemoveChip} />
           )}
         </div>
       )}
     </main>
+  );
+}
+
+function Clarify({
+  question,
+  chips,
+  onClarifyChip
+}: {
+  readonly question: string;
+  readonly chips: readonly string[];
+  readonly onClarifyChip: (value: string) => void;
+}) {
+  return (
+    <div className="pa-card-sm" style={{ marginTop: "1rem" }}>
+      <p style={{ margin: "0 0 0.75rem", fontWeight: 800 }}>{question}</p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {chips.map((chip) => (
+          <button
+            key={chip}
+            className="pa-chip"
+            onClick={() => onClarifyChip(chip)}
+          >
+            {formatFacetValue(chip)}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -148,16 +192,16 @@ function Results({
         {hasFacets ? (
           <>
             {facets.issues.map((issue) => (
-              <Chip key={issue} label={`issues: ${issue}`} onRemove={() => onRemoveChip("issue", issue)} />
+              <Chip key={issue} label={`issues: ${formatFacetValue(issue)}`} onRemove={() => onRemoveChip("issue", issue)} />
             ))}
             {facets.population && (
               <Chip
-                label={`population: ${facets.population}`}
+                label={`population: ${formatFacetValue(facets.population)}`}
                 onRemove={() => onRemoveChip("population", facets.population ?? "")}
               />
             )}
             {facets.prefers.map((pref) => (
-              <Chip key={pref} label={`prefers: ${pref}`} onRemove={() => onRemoveChip("prefer", pref)} />
+              <Chip key={pref} label={`prefers: ${formatFacetValue(pref)}`} onRemove={() => onRemoveChip("prefer", pref)} />
             ))}
           </>
         ) : (
@@ -187,6 +231,10 @@ function Results({
       </div>
     </div>
   );
+}
+
+function formatFacetValue(value: string): string {
+  return value.replaceAll("_", " ");
 }
 
 function Chip({ label, onRemove }: { readonly label: string; readonly onRemove: () => void }) {

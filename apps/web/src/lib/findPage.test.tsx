@@ -12,7 +12,8 @@ import {
   type FindApiResponse,
   type FindFetch
 } from "./findApi";
-import type { Facets } from "./understandQuery";
+import { facetsFromUnderstood } from "./understandQuery";
+import type { UnderstoodQuery } from "../../../../packages/core/src/index";
 
 describe("find page", () => {
   test("posts to the real find route and renders the crisis card from the route response", async () => {
@@ -64,7 +65,14 @@ describe("find page", () => {
       })
     ];
     const { fetcher } = mockFindFetch({
-      understood: null,
+      understood: understoodFixture({
+        issues: [{ value: "anxiety", vocab: true, confidence: 0.9 }],
+        population: "teen",
+        preferences: {
+          logistics: ["evenings"]
+        }
+      }),
+      source: "model",
       unmet: false,
       results: cards
     });
@@ -72,11 +80,7 @@ describe("find page", () => {
     const response = await postFindQuery(query, fetcher);
     const html = renderFindScreen({
       text: query,
-      view: resultsView(query, response, {
-        issues: ["anxiety"],
-        population: "teen",
-        prefers: ["evenings"]
-      })
+      view: resultsView(query, response)
     });
 
     expect(html).toContain("real route · safety gate active · dev embeddings · nothing stored");
@@ -92,7 +96,10 @@ describe("find page", () => {
   test("renders the sparse-corpus fallback when the route returns fewer than three cards", async () => {
     const query = "Looking for chronic pain support near Detroit";
     const { fetcher } = mockFindFetch({
-      understood: null,
+      understood: understoodFixture({
+        issues: [{ value: "chronic_pain", vocab: true, confidence: 0.9 }]
+      }),
+      source: "fallback",
       unmet: true,
       results: [
         findCard({
@@ -106,11 +113,7 @@ describe("find page", () => {
     const response = await postFindQuery(query, fetcher);
     const html = renderFindScreen({
       text: query,
-      view: resultsView(query, response, {
-        issues: [],
-        population: undefined,
-        prefers: []
-      })
+      view: resultsView(query, response)
     });
 
     // Route-contract confirmation for L1-S5: an unmet:true response still
@@ -124,7 +127,8 @@ describe("find page", () => {
   test("sends query text only in the POST /api/find body", async () => {
     const query = "raw query text should have exactly one sink";
     const { fetcher, calls } = mockFindFetch({
-      understood: null,
+      understood: understoodFixture(),
+      source: "fallback",
       unmet: false,
       results: []
     });
@@ -149,6 +153,34 @@ describe("find page", () => {
       error.mockRestore();
     }
   });
+
+  test("renders one clarify chip-question from the route payload", async () => {
+    const query = "help";
+    const { fetcher } = mockFindFetch({
+      understood: understoodFixture({
+        issues: [],
+        kind: "either",
+        confidence: 0.35
+      }),
+      source: "fallback",
+      clarify: {
+        question: "What kind of support should we look for?",
+        chips: ["anxiety", "depression", "trauma_ptsd"]
+      }
+    });
+
+    const response = await postFindQuery(query, fetcher);
+    const html = renderFindScreen({
+      text: query,
+      view: clarifyView(query, response)
+    });
+
+    expect(html).toContain("What kind of support should we look for?");
+    expect(html).toContain("anxiety");
+    expect(html).toContain("depression");
+    expect(html).toContain("trauma ptsd");
+    expect(html).not.toContain("North Star Teen Therapy");
+  });
 });
 
 function renderFindScreen(
@@ -171,10 +203,27 @@ function renderFindScreen(
     },
     onRemoveChip() {
       return undefined;
+    },
+    onClarifyChip() {
+      return undefined;
     }
   };
 
   return renderToStaticMarkup(createElement(FindScreen, props));
+}
+
+function clarifyView(queryText: string, response: FindApiResponse): FindView {
+  if ("crisis" in response || !("clarify" in response)) {
+    throw new Error("Expected clarify response");
+  }
+
+  return {
+    kind: "clarify",
+    queryText,
+    facets: facetsFromUnderstood(response.understood),
+    question: response.clarify.question,
+    chips: response.clarify.chips
+  };
 }
 
 function mockFindFetch(response: FindApiResponse): {
@@ -201,6 +250,18 @@ function mockFindFetch(response: FindApiResponse): {
   return { fetcher, calls };
 }
 
+function understoodFixture(
+  overrides: Partial<UnderstoodQuery> = {}
+): UnderstoodQuery {
+  return {
+    issues: [],
+    kind: "therapist",
+    preferences: {},
+    confidence: 0.8,
+    ...overrides
+  };
+}
+
 function crisisView(queryText: string, response: FindApiResponse): FindView {
   if (!("crisis" in response)) {
     throw new Error("Expected crisis response");
@@ -215,17 +276,16 @@ function crisisView(queryText: string, response: FindApiResponse): FindView {
 
 function resultsView(
   queryText: string,
-  response: FindApiResponse,
-  facets: Facets
+  response: FindApiResponse
 ): FindView {
-  if ("crisis" in response) {
+  if ("crisis" in response || "clarify" in response) {
     throw new Error("Expected results response");
   }
 
   return {
     kind: "results",
     queryText,
-    facets,
+    facets: facetsFromUnderstood(response.understood),
     cards: response.results
   };
 }

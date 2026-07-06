@@ -21,6 +21,14 @@ export const PROMPT_ROUTING = {
       maxTokens: 900
     }
   },
+  "understand@2": {
+    provider: "google",
+    model: "gemini-3.1-flash-lite",
+    params: {
+      temperature: 0,
+      maxTokens: 900
+    }
+  },
   "crisis_gate@1": {
     provider: "anthropic",
     model: "claude-3-5-haiku-20241022",

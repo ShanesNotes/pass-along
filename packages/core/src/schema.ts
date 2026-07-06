@@ -187,7 +187,8 @@ export const FindPerformedEventSchema = z
         query_hash_sha256: Sha256Schema,
         result_count: z.number().int().nonnegative(),
         latency_ms: z.number().int().nonnegative(),
-        degraded: z.boolean().optional()
+        degraded: z.boolean().optional(),
+        understood_source: z.enum(["model", "fallback"]).optional()
       })
       .strict()
   })

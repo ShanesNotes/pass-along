@@ -129,8 +129,8 @@ describe("eval runner", () => {
     expect(report.suites[0]).toMatchObject({
       suite: "understand",
       status: "PASSED",
-      total: 26,
-      passed: 26,
+      total: 36,
+      passed: 36,
       failed: 0,
       metric: "field_accuracy",
       threshold_met: true

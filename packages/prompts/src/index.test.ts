@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   PROMPT_REGISTRY,
+  UNDERSTAND_2_PROMPT,
   assertRegisteredGoldensExist,
   listRegisteredPrompts,
   loadPrompt
@@ -13,11 +14,11 @@ describe("prompt registry", () => {
   });
 
   test("loads prompt file content by PROMPT_ID@version", () => {
-    const prompt = loadPrompt("understand@1");
+    const prompt = loadPrompt("understand@2");
 
-    expect(prompt.content).toContain("DRAFT pending clinical review");
+    expect(prompt.content).toContain("strict JSON");
     expect(prompt.content).toContain("UnderstoodQuerySchema");
-    expect(prompt.promptRef).toBe("understand@1");
+    expect(prompt.promptRef).toBe("understand@2");
   });
 
   test("every registered prompt has a colocated goldens file", () => {
@@ -31,7 +32,14 @@ describe("prompt registry", () => {
   test("registry keys are exact id@version prompt refs", () => {
     expect(Object.keys(PROMPT_REGISTRY).sort()).toEqual([
       "crisis_gate@1",
-      "understand@1"
+      "understand@1",
+      "understand@2"
     ]);
+  });
+
+  test("keeps the understand@2 runtime module synced to the markdown source", () => {
+    const prompt = loadPrompt("understand@2");
+
+    expect(readFileSync(prompt.filePath, "utf8")).toBe(UNDERSTAND_2_PROMPT);
   });
 });
