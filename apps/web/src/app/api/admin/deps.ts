@@ -26,6 +26,7 @@ import {
   loadConfig,
   type AppConfig
 } from "../../../../../../packages/core/src/index";
+import { createAdminAuthenticator } from "../../../../../../packages/engine/src/auth/index";
 
 export type AdminQueueResponse = {
   readonly queue: readonly AdminReviewQueueItem[];
@@ -72,7 +73,7 @@ export function defaultAdminRouteDeps(): AdminRouteDeps {
 export function createAdminQueueGetHandler(deps: AdminRouteDeps) {
   return async (request: Request): Promise<Response> => {
     const config = deps.config ?? loadConfig(deps.env);
-    const auth = authorizeAdmin(request, config);
+    const auth = await authorizeAdmin(request, config);
 
     if (!auth.ok) {
       return auth.response;
@@ -87,7 +88,7 @@ export function createAdminQueueGetHandler(deps: AdminRouteDeps) {
 export function createAdminDecidePostHandler(deps: AdminRouteDeps) {
   return async (request: Request): Promise<Response> => {
     const config = deps.config ?? loadConfig(deps.env);
-    const auth = authorizeAdmin(request, config);
+    const auth = await authorizeAdmin(request, config);
 
     if (!auth.ok) {
       return auth.response;
@@ -171,28 +172,22 @@ export async function embedApprovedRecommendationInFindStore(input: {
   });
 }
 
-function authorizeAdmin(
+// Picks the admin auth method by what's configured — Supabase JWT secret,
+// else the demo token, else fail-closed 503 — via the AdminAuthenticator
+// port (packages/engine/src/auth). Status codes/error bodies are unchanged
+// from before this packet.
+async function authorizeAdmin(
   request: Request,
   config: AppConfig
-):
-  | { readonly ok: true }
-  | { readonly ok: false; readonly response: Response } {
-  const expectedToken = config.admin.demoToken;
+): Promise<
+  { readonly ok: true } | { readonly ok: false; readonly response: Response }
+> {
+  const outcome = await createAdminAuthenticator(config).authorize(request);
 
-  if (!expectedToken) {
+  if (!outcome.ok) {
     return {
       ok: false,
-      response: json({ error: "ADMIN_DISABLED" }, 503)
-    };
-  }
-
-  const authorization = request.headers.get("authorization") ?? "";
-  const suppliedToken = /^Bearer\s+(.+)$/iu.exec(authorization)?.[1]?.trim();
-
-  if (suppliedToken !== expectedToken) {
-    return {
-      ok: false,
-      response: json({ error: "ADMIN_UNAUTHORIZED" }, 401)
+      response: json({ error: outcome.error }, outcome.status)
     };
   }
 

@@ -37,6 +37,7 @@ describe("loadConfig", () => {
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_ANON_KEY: "anon-key",
       SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+      SUPABASE_JWT_SECRET: " jwt-secret ",
       GEMINI_API_KEY: " gemini-key ",
       ANTHROPIC_API_KEY: "anthropic-key",
       OPENAI_API_KEY: "openai-key",
@@ -53,7 +54,8 @@ describe("loadConfig", () => {
       supabase: {
         url: "https://example.supabase.co",
         anonKey: "anon-key",
-        serviceRoleKey: "service-role-key"
+        serviceRoleKey: "service-role-key",
+        jwtSecret: "jwt-secret"
       },
       models: {
         geminiApiKey: "gemini-key",
@@ -113,6 +115,7 @@ describe("loadConfig", () => {
       "postgres://user:secret-pass@example.test/pass_along",
       "anon-secret",
       "service-role-secret",
+      "jwt-secret-value",
       "gemini-secret",
       "google-secret",
       "anthropic-secret",
@@ -124,11 +127,12 @@ describe("loadConfig", () => {
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_ANON_KEY: secretValues[1],
       SUPABASE_SERVICE_ROLE_KEY: secretValues[2],
-      GEMINI_API_KEY: secretValues[3],
-      GOOGLE_API_KEY: secretValues[4],
-      ANTHROPIC_API_KEY: secretValues[5],
-      OPENAI_API_KEY: secretValues[6],
-      ADMIN_DEMO_TOKEN: secretValues[7]
+      SUPABASE_JWT_SECRET: secretValues[3],
+      GEMINI_API_KEY: secretValues[4],
+      GOOGLE_API_KEY: secretValues[5],
+      ANTHROPIC_API_KEY: secretValues[6],
+      OPENAI_API_KEY: secretValues[7],
+      ADMIN_DEMO_TOKEN: secretValues[8]
     });
     const serialized = JSON.stringify(config);
     const inspected = inspect(config);

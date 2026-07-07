@@ -61,6 +61,7 @@ const ConfigEnvSchema = z.object({
   SUPABASE_URL: optionalUrl("SUPABASE_URL"),
   SUPABASE_ANON_KEY: optionalString(),
   SUPABASE_SERVICE_ROLE_KEY: optionalString(),
+  SUPABASE_JWT_SECRET: optionalString(),
   GEMINI_API_KEY: optionalString(),
   GOOGLE_API_KEY: optionalString(),
   ANTHROPIC_API_KEY: optionalString(),
@@ -83,6 +84,7 @@ export type AppConfig = Readonly<{
     url?: string;
     anonKey?: string;
     serviceRoleKey?: string;
+    jwtSecret?: string;
   }>;
   models: Readonly<{
     geminiApiKey?: string;
@@ -114,6 +116,7 @@ export type ConfigRequirement =
   | "supabase.url"
   | "supabase.anonKey"
   | "supabase.serviceRoleKey"
+  | "supabase.jwtSecret"
   | "models.geminiApiKey"
   | "models.googleApiKey"
   | "models.anthropicApiKey"
@@ -151,6 +154,9 @@ export function loadConfig(
         : {}),
       ...(parsed.SUPABASE_SERVICE_ROLE_KEY
         ? { serviceRoleKey: parsed.SUPABASE_SERVICE_ROLE_KEY }
+        : {}),
+      ...(parsed.SUPABASE_JWT_SECRET
+        ? { jwtSecret: parsed.SUPABASE_JWT_SECRET }
         : {})
     },
     models: {
@@ -221,6 +227,7 @@ function parseEnv(env: NodeJS.ProcessEnv): z.output<typeof ConfigEnvSchema> {
     SUPABASE_URL: cleanEnvValue(env.SUPABASE_URL),
     SUPABASE_ANON_KEY: cleanEnvValue(env.SUPABASE_ANON_KEY),
     SUPABASE_SERVICE_ROLE_KEY: cleanEnvValue(env.SUPABASE_SERVICE_ROLE_KEY),
+    SUPABASE_JWT_SECRET: cleanEnvValue(env.SUPABASE_JWT_SECRET),
     GEMINI_API_KEY: cleanEnvValue(env.GEMINI_API_KEY),
     GOOGLE_API_KEY: cleanEnvValue(env.GOOGLE_API_KEY),
     ANTHROPIC_API_KEY: cleanEnvValue(env.ANTHROPIC_API_KEY),
@@ -283,6 +290,8 @@ function valueForRequirement(
       return config.supabase.anonKey;
     case "supabase.serviceRoleKey":
       return config.supabase.serviceRoleKey;
+    case "supabase.jwtSecret":
+      return config.supabase.jwtSecret;
     case "models.geminiApiKey":
       return config.models.geminiApiKey;
     case "models.googleApiKey":
@@ -306,6 +315,8 @@ function envLabelFor(requirement: ConfigRequirement): string {
       return "SUPABASE_ANON_KEY";
     case "supabase.serviceRoleKey":
       return "SUPABASE_SERVICE_ROLE_KEY";
+    case "supabase.jwtSecret":
+      return "SUPABASE_JWT_SECRET";
     case "models.geminiApiKey":
       return "GEMINI_API_KEY";
     case "models.googleApiKey":
@@ -342,7 +353,8 @@ function redactConfig(config: AppConfig): AppConfig {
     supabase: {
       ...(config.supabase.url ? { url: config.supabase.url } : {}),
       ...(config.supabase.anonKey ? { anonKey: REDACTED } : {}),
-      ...(config.supabase.serviceRoleKey ? { serviceRoleKey: REDACTED } : {})
+      ...(config.supabase.serviceRoleKey ? { serviceRoleKey: REDACTED } : {}),
+      ...(config.supabase.jwtSecret ? { jwtSecret: REDACTED } : {})
     },
     models: {
       ...(config.models.geminiApiKey ? { geminiApiKey: REDACTED } : {}),
