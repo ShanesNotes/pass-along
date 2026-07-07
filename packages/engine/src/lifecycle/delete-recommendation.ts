@@ -1,4 +1,8 @@
-import { hasLifecycleStorage } from "./ports.js";
+import {
+  hasLifecycleStorage,
+  hasTransactionalLifecycleStorage,
+  type LifecycleStoragePort
+} from "./ports.js";
 
 export interface DeleteRecommendationInput {
   readonly recommendationId: string;
@@ -19,6 +23,12 @@ export interface DeleteRecommendationResult {
 // moderation/outbox events tied to this recommendation are redacted in
 // place; then one tombstone moderation_events row records that a deletion
 // happened, with no content beyond the fact of it.
+//
+// Audit finding F2: the whole cascade runs inside one transaction when the
+// storage supports it (TransactionalLifecycleStorage) — otherwise a crash
+// between, say, deleting the original story and writing the tombstone would
+// leave a partially-deleted recommendation with no record that a deletion
+// was ever attempted.
 export async function deleteRecommendation(
   input: DeleteRecommendationInput
 ): Promise<DeleteRecommendationResult> {
@@ -30,36 +40,40 @@ export async function deleteRecommendation(
     };
   }
 
-  const status = await input.storage.getRecommendationStatus(
-    input.recommendationId
-  );
-
-  if (status === undefined) {
-    return {
-      recommendationId: input.recommendationId,
-      deleted: false,
-      skippedReason: "not_found"
-    };
-  }
-
   const now = input.now?.() ?? new Date();
 
-  await input.storage.deleteOriginalStory(input.recommendationId);
-  await input.storage.deleteRecTags(input.recommendationId);
-  await input.storage.deleteEmbedding(input.recommendationId);
-  await input.storage.deleteIntakeArtifacts(input.recommendationId);
-  await input.storage.redactRecommendation(input.recommendationId, now);
-  await input.storage.redactModerationEventsForRecommendation(
-    input.recommendationId
-  );
-  await input.storage.redactOutboxEventsForRecommendation(
-    input.recommendationId
-  );
-  await input.storage.writeDeletionTombstone({
-    recommendationId: input.recommendationId,
+  if (hasTransactionalLifecycleStorage(input.storage)) {
+    return input.storage.withLifecycleTransaction((tx) =>
+      runCascade(tx, input.recommendationId, now)
+    );
+  }
+
+  return runCascade(input.storage, input.recommendationId, now);
+}
+
+async function runCascade(
+  storage: LifecycleStoragePort,
+  recommendationId: string,
+  now: Date
+): Promise<DeleteRecommendationResult> {
+  const status = await storage.getRecommendationStatus(recommendationId);
+
+  if (status === undefined) {
+    return { recommendationId, deleted: false, skippedReason: "not_found" };
+  }
+
+  await storage.deleteOriginalStory(recommendationId);
+  await storage.deleteRecTags(recommendationId);
+  await storage.deleteEmbedding(recommendationId);
+  await storage.deleteIntakeArtifacts(recommendationId);
+  await storage.redactRecommendation(recommendationId, now);
+  await storage.redactModerationEventsForRecommendation(recommendationId);
+  await storage.redactOutboxEventsForRecommendation(recommendationId);
+  await storage.writeDeletionTombstone({
+    recommendationId,
     fromState: status,
     now
   });
 
-  return { recommendationId: input.recommendationId, deleted: true };
+  return { recommendationId, deleted: true };
 }

@@ -53,9 +53,16 @@ export function verifyHs256Jwt(
     return { ok: false, reason: "bad_signature" };
   }
 
+  // Real Supabase-issued access tokens always carry a numeric exp (set from
+  // the project's session/JWT expiry on every mint); treat a missing or
+  // non-numeric exp as untrusted rather than immortal.
   const exp = payload.exp;
 
-  if (typeof exp === "number" && exp * 1000 <= now()) {
+  if (typeof exp !== "number" || !Number.isFinite(exp)) {
+    return { ok: false, reason: "missing_exp" };
+  }
+
+  if (exp * 1000 <= now()) {
     return { ok: false, reason: "expired" };
   }
 

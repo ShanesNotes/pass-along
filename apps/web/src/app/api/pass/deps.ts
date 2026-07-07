@@ -15,6 +15,7 @@ import {
 } from "../../../../../../packages/engine/src/safety/index";
 import { logger } from "../../../../../../packages/engine/src/http/index";
 import { createStores } from "../../../../../../packages/engine/src/db/stores";
+import { AlreadyDecidedError } from "../../../../../../packages/engine/src/db/adapters/pass-store";
 import {
   loadConfig,
   type AppConfig,
@@ -277,6 +278,13 @@ export function createPassDemoStore(
   seedProviders: readonly Provider[] = fixtureProviders
 ): PassDemoStore {
   const base = createInMemoryJobStorage();
+  // Audit finding F2 (TOCTOU): mirrors PgPassStore's row-lock fix so both
+  // stores throw the same AlreadyDecidedError for a concurrent decide,
+  // rather than one store silently double-transitioning. The Set.has/
+  // Set.add pair below has no `await` between them, so it's an atomic
+  // claim the same way the DB row lock is — only one concurrent call ever
+  // proceeds past it.
+  const decidingClaims = new Set<string>();
   let nextRecommendation = 1;
   let nextProvider = 1;
   const providers = new Map(
@@ -389,79 +397,94 @@ export function createPassDemoStore(
     },
 
     async decideAdminReview(input) {
-      const currentState = await store.getRecommendationState(
-        input.recommendationId
-      );
-
-      if (currentState === undefined) {
-        throw new Error(`Unknown recommendation ${input.recommendationId}`);
-      }
-
-      if (currentState !== "review_pending") {
-        throw new Error(
-          `Cannot decide recommendation ${input.recommendationId} from ${currentState}`
-        );
-      }
-
-      if (input.action === "edit_scrub") {
-        await applyEditedScrub(input.recommendationId, input.editedScrub);
-      }
-
-      const transitionAction = transitionActionForAdminDecision(input.action);
-      const transitionRow = await store.transitionRecommendation({
-        recommendationId: input.recommendationId,
-        action: transitionAction,
-        actor: input.reviewer,
-        ...(input.reason ? { reason: input.reason } : {}),
-        metadata: {
-          source: "admin_demo",
-          admin_action: input.action,
-          edited_scrub: input.action === "edit_scrub"
-        },
-        idempotencyKey: [
-          "admin_decide",
-          input.recommendationId,
-          transitionAction,
-          input.now.toISOString()
-        ].join(":"),
-        now: input.now
-      });
-      const eventAction = moderationEventActionForAdminDecision(input.action);
-      const moderationEvent = await appendModerationDecidedEvent({
-        recommendationId: input.recommendationId,
-        action: eventAction,
-        reviewer: input.reviewer,
-        transitionRow,
-        now: input.now
-      });
-
-      if (transitionRow.toState === "published") {
-        await store.appendEvent(
-          {
-            type: "submission.published",
-            payload: { recommendation_id: input.recommendationId }
-          },
-          {
-            idempotencyKey: `admin:${transitionRow.id}:submission.published`,
-            emittedAt: input.now
-          }
-        );
-      }
-
-      return {
-        recommendation_id: input.recommendationId,
-        action: input.action,
-        status: transitionRow.toState,
-        transition: {
-          action: transitionRow.action,
-          from: transitionRow.fromState,
-          to: transitionRow.toState
-        },
-        event: {
-          id: moderationEvent.id,
-          type: "moderation.decided"
+      if (decidingClaims.has(input.recommendationId)) {
+        while (decidingClaims.has(input.recommendationId)) {
+          await Promise.resolve();
         }
-      };
+
+        const state =
+          (await store.getRecommendationState(input.recommendationId)) ??
+          "received";
+        throw new AlreadyDecidedError(input.recommendationId, state);
+      }
+
+      decidingClaims.add(input.recommendationId);
+
+      try {
+        const currentState = await store.getRecommendationState(
+          input.recommendationId
+        );
+
+        if (currentState === undefined) {
+          throw new Error(`Unknown recommendation ${input.recommendationId}`);
+        }
+
+        if (currentState !== "review_pending") {
+          throw new AlreadyDecidedError(input.recommendationId, currentState);
+        }
+
+        if (input.action === "edit_scrub") {
+          await applyEditedScrub(input.recommendationId, input.editedScrub);
+        }
+
+        const transitionAction = transitionActionForAdminDecision(input.action);
+        const transitionRow = await store.transitionRecommendation({
+          recommendationId: input.recommendationId,
+          action: transitionAction,
+          actor: input.reviewer,
+          ...(input.reason ? { reason: input.reason } : {}),
+          metadata: {
+            source: "admin_demo",
+            admin_action: input.action,
+            edited_scrub: input.action === "edit_scrub"
+          },
+          idempotencyKey: [
+            "admin_decide",
+            input.recommendationId,
+            transitionAction,
+            input.now.toISOString()
+          ].join(":"),
+          now: input.now
+        });
+        const eventAction = moderationEventActionForAdminDecision(input.action);
+        const moderationEvent = await appendModerationDecidedEvent({
+          recommendationId: input.recommendationId,
+          action: eventAction,
+          reviewer: input.reviewer,
+          transitionRow,
+          now: input.now
+        });
+
+        if (transitionRow.toState === "published") {
+          await store.appendEvent(
+            {
+              type: "submission.published",
+              payload: { recommendation_id: input.recommendationId }
+            },
+            {
+              idempotencyKey: `admin:${transitionRow.id}:submission.published`,
+              emittedAt: input.now
+            }
+          );
+        }
+
+        return {
+          recommendation_id: input.recommendationId,
+          action: input.action,
+          status: transitionRow.toState,
+          transition: {
+            action: transitionRow.action,
+            from: transitionRow.fromState,
+            to: transitionRow.toState
+          },
+          event: {
+            id: moderationEvent.id,
+            type: "moderation.decided"
+          }
+        };
+      } finally {
+        decidingClaims.delete(input.recommendationId);
+      }
     },
 
     async getRecommendationEmbeddingSource(recommendationId) {

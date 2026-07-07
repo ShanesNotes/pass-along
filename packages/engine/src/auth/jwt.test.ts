@@ -5,15 +5,45 @@ const SECRET = "test-jwt-secret";
 
 describe("verifyHs256Jwt", () => {
   test("accepts a validly signed, unexpired token", () => {
-    const token = signHs256Jwt({ sub: "user-1", role: "admin" }, SECRET);
+    const token = signHs256Jwt(
+      { sub: "user-1", role: "admin", exp: 9_999_999_999 },
+      SECRET
+    );
     const result = verifyHs256Jwt(token, SECRET);
 
     expect(result.ok).toBe(true);
     expect(result.payload).toMatchObject({ sub: "user-1", role: "admin" });
   });
 
-  test("rejects a forged signature", () => {
+  // Real Supabase-issued access tokens always carry a numeric exp (Supabase
+  // sets it from the project's configured session/JWT expiry on every
+  // token it mints) — so a token with no exp, or a non-numeric one, is
+  // either forged/hand-rolled or from a broken issuer. Either way, treating
+  // it as immortal is the wrong default; reject it.
+  test("rejects a token with no exp claim", () => {
     const token = signHs256Jwt({ sub: "user-1", role: "admin" }, SECRET);
+    const result = verifyHs256Jwt(token, SECRET);
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("missing_exp");
+  });
+
+  test("rejects a token with a non-numeric exp claim", () => {
+    const token = signHs256Jwt(
+      { sub: "user-1", role: "admin", exp: "9999999999" },
+      SECRET
+    );
+    const result = verifyHs256Jwt(token, SECRET);
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("missing_exp");
+  });
+
+  test("rejects a forged signature", () => {
+    const token = signHs256Jwt(
+      { sub: "user-1", role: "admin", exp: 9_999_999_999 },
+      SECRET
+    );
     const [header, payload] = token.split(".");
     const forged = `${header}.${payload}.forged-signature`;
 

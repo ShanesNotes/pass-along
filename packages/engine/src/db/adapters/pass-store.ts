@@ -9,6 +9,7 @@ import type {
   AppendEventInput,
   EventsOutboxRow,
   IntakeRecommendationSource,
+  JobStepClaimResult,
   JobStepRecord,
   JobStoragePort,
   JobsDlqRow,
@@ -26,6 +27,11 @@ import type {
   SubmissionState
 } from "../../../../core/src/index.js";
 import type { SqlExecutor } from "../../retrieval/pgvector.js";
+import type {
+  DeletionTombstoneInput,
+  LifecycleStoragePort
+} from "../../lifecycle/ports.js";
+import { PgLifecycleStorage } from "../../lifecycle/pg-adapter.js";
 import { PgIntakeArtifactStorage } from "./intake-storage.js";
 import { PgJobStorage } from "./job-storage.js";
 
@@ -147,6 +153,36 @@ interface RecommendationRow {
   readonly scrubbed_story: string | null;
 }
 
+// Thrown by decideAdminReview (audit finding F2) when, under the row lock,
+// the recommendation is no longer "review_pending" — i.e. a concurrent
+// decide already won the race. Callers (apps/web's admin decide route)
+// should treat this as a clean, expected outcome, not a server error: the
+// recommendation WAS decided, just not by this call.
+export class AlreadyDecidedError extends Error {
+  readonly recommendationId: string;
+  readonly status: SubmissionState;
+
+  constructor(recommendationId: string, status: SubmissionState) {
+    super(
+      `Recommendation ${recommendationId} was already decided (now ${status})`
+    );
+    this.name = "AlreadyDecidedError";
+    this.recommendationId = recommendationId;
+    this.status = status;
+  }
+}
+
+interface TransactionalExecutor extends SqlExecutor {
+  withTransaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
+}
+
+function isTransactional(sql: SqlExecutor): sql is TransactionalExecutor {
+  return (
+    typeof (sql as { readonly withTransaction?: unknown }).withTransaction ===
+    "function"
+  );
+}
+
 // Full DB-backed PassDemoStore equivalent (apps/web/src/app/api/pass/deps.ts
 // defines PassDemoStore locally — packages/engine can't import it without
 // inverting the monorepo dependency direction, so this mirrors its shape
@@ -160,13 +196,74 @@ interface RecommendationRow {
 // verified badge. This store follows that existing precedent rather than
 // fixing it — flagging it again here since it now also affects newly
 // created providers.
-export class PgPassStore implements JobStoragePort {
+export class PgPassStore implements JobStoragePort, LifecycleStoragePort {
   private readonly jobStorage: PgJobStorage;
   private readonly intakeStorage: PgIntakeArtifactStorage;
+  private readonly lifecycleStorage: PgLifecycleStorage;
 
   constructor(private readonly sql: SqlExecutor) {
     this.jobStorage = new PgJobStorage(sql);
     this.intakeStorage = new PgIntakeArtifactStorage(sql);
+    this.lifecycleStorage = new PgLifecycleStorage(sql);
+  }
+
+  // --- LifecycleStoragePort passthrough (audit F1: this is what makes
+  // hasLifecycleStorage() true for the real DB-backed store, so the
+  // deleteSubmission job's MHMDA cascade actually runs instead of always
+  // reporting storage_unavailable) ---
+  getRecommendationStatus(recommendationId: string): Promise<string | undefined> {
+    return this.lifecycleStorage.getRecommendationStatus(recommendationId);
+  }
+
+  redactRecommendation(recommendationId: string, now: Date): Promise<void> {
+    return this.lifecycleStorage.redactRecommendation(recommendationId, now);
+  }
+
+  deleteOriginalStory(recommendationId: string): Promise<void> {
+    return this.lifecycleStorage.deleteOriginalStory(recommendationId);
+  }
+
+  deleteRecTags(recommendationId: string): Promise<void> {
+    return this.lifecycleStorage.deleteRecTags(recommendationId);
+  }
+
+  deleteEmbedding(recommendationId: string): Promise<void> {
+    return this.lifecycleStorage.deleteEmbedding(recommendationId);
+  }
+
+  deleteIntakeArtifacts(recommendationId: string): Promise<void> {
+    return this.lifecycleStorage.deleteIntakeArtifacts(recommendationId);
+  }
+
+  redactModerationEventsForRecommendation(recommendationId: string): Promise<void> {
+    return this.lifecycleStorage.redactModerationEventsForRecommendation(
+      recommendationId
+    );
+  }
+
+  redactOutboxEventsForRecommendation(recommendationId: string): Promise<void> {
+    return this.lifecycleStorage.redactOutboxEventsForRecommendation(
+      recommendationId
+    );
+  }
+
+  writeDeletionTombstone(input: DeletionTombstoneInput): Promise<void> {
+    return this.lifecycleStorage.writeDeletionTombstone(input);
+  }
+
+  // Audit finding F2: runs the deletion cascade's eight steps as one
+  // transaction when this.sql supports it (real Postgres), else runs them
+  // against the plain executor (best-effort, no atomicity — matches how
+  // decideAdminReview degrades for test doubles that don't implement
+  // withTransaction).
+  withLifecycleTransaction<T>(
+    fn: (tx: LifecycleStoragePort) => Promise<T>
+  ): Promise<T> {
+    if (isTransactional(this.sql)) {
+      return this.sql.withTransaction((tx) => fn(new PgLifecycleStorage(tx)));
+    }
+
+    return fn(this.lifecycleStorage);
   }
 
   // --- JobStoragePort passthrough ---
@@ -223,6 +320,10 @@ export class PgPassStore implements JobStoragePort {
 
   getJobStep(idempotencyKey: string): Promise<JobStepRecord | undefined> {
     return this.jobStorage.getJobStep(idempotencyKey);
+  }
+
+  claimJobStep(record: JobStepRecord): Promise<JobStepClaimResult> {
+    return this.jobStorage.claimJobStep(record);
   }
 
   upsertJobStep(record: JobStepRecord): Promise<JobStepRecord> {
@@ -435,6 +536,18 @@ export class PgPassStore implements JobStoragePort {
     };
   }
 
+  // Audit finding F2 (TOCTOU): the old version read the current state, then
+  // later wrote a transition, with nothing in between stopping a second
+  // concurrent decide from reading the same "review_pending" state and also
+  // transitioning. This runs the whole read-check -> edit -> transition ->
+  // events sequence inside one transaction with `select ... for update` on
+  // the recommendation row: whichever concurrent caller's transaction
+  // starts first holds the row lock until it commits, so the second
+  // caller's `for update` blocks until the first is done, then re-reads the
+  // (now-changed) state and throws AlreadyDecidedError instead of quietly
+  // double-transitioning. When `this.sql` doesn't support transactions
+  // (some tests hand PgPassStore a bare SqlExecutor), this degrades to the
+  // old best-effort behavior with a comment at the duck-type check.
   async decideAdminReview(input: {
     readonly recommendationId: string;
     readonly action: PgAdminDecisionAction;
@@ -443,25 +556,54 @@ export class PgPassStore implements JobStoragePort {
     readonly reviewer: string;
     readonly now: Date;
   }): Promise<PgAdminDecisionResult> {
-    const currentState = await this.getRecommendationState(input.recommendationId);
+    if (isTransactional(this.sql)) {
+      return this.sql.withTransaction((tx) =>
+        this.decideAdminReviewWithExecutor(tx, input)
+      );
+    }
+
+    return this.decideAdminReviewWithExecutor(this.sql, input);
+  }
+
+  private async decideAdminReviewWithExecutor(
+    tx: SqlExecutor,
+    input: {
+      readonly recommendationId: string;
+      readonly action: PgAdminDecisionAction;
+      readonly editedScrub?: string;
+      readonly reason?: string;
+      readonly reviewer: string;
+      readonly now: Date;
+    }
+  ): Promise<PgAdminDecisionResult> {
+    const jobStorage = new PgJobStorage(tx);
+    const intakeStorage = new PgIntakeArtifactStorage(tx);
+
+    const locked = await tx.query<{ status: SubmissionState }>(
+      "select status from public.recommendations where id = $1::uuid for update",
+      [input.recommendationId]
+    );
+    const currentState = locked.rows[0]?.status;
 
     if (currentState === undefined) {
       throw new Error(`Unknown recommendation ${input.recommendationId}`);
     }
 
     if (currentState !== "review_pending") {
-      throw new Error(
-        `Cannot decide recommendation ${input.recommendationId} from ${currentState}`
-      );
+      throw new AlreadyDecidedError(input.recommendationId, currentState);
     }
 
     if (input.action === "edit_scrub") {
-      await this.applyEditedScrub(input.recommendationId, input.editedScrub);
+      await this.applyEditedScrub(
+        intakeStorage,
+        input.recommendationId,
+        input.editedScrub
+      );
     }
 
     const transitionAction: SubmissionAction =
       input.action === "edit_scrub" ? "edit_approve" : input.action;
-    const transitionRow = await this.transitionRecommendation({
+    const transitionRow = await jobStorage.transitionRecommendation({
       recommendationId: input.recommendationId,
       action: transitionAction,
       actor: input.reviewer,
@@ -485,7 +627,7 @@ export class PgPassStore implements JobStoragePort {
       { type: "moderation.decided" }
     >["payload"]["action"] =
       input.action === "edit_scrub" ? "edit_approve" : input.action;
-    const moderationEvent = await this.appendEvent(
+    const moderationEvent = await jobStorage.appendEvent(
       {
         type: "moderation.decided",
         payload: {
@@ -501,7 +643,7 @@ export class PgPassStore implements JobStoragePort {
     );
 
     if (transitionRow.toState === "published") {
-      await this.appendEvent(
+      await jobStorage.appendEvent(
         {
           type: "submission.published",
           payload: { recommendation_id: input.recommendationId }
@@ -527,12 +669,14 @@ export class PgPassStore implements JobStoragePort {
   }
 
   private async applyEditedScrub(
+    intakeStorage: PgIntakeArtifactStorage,
     recommendationId: string,
     editedScrub: string | undefined
   ): Promise<void> {
     const scrubbedStory = editedScrub?.trim();
-    const existingScrub = await this.getScrubResult(recommendationId);
-    const original = await this.getRestrictedOriginalRecommendation(recommendationId);
+    const existingScrub = await intakeStorage.getScrubResult(recommendationId);
+    const original =
+      await intakeStorage.getRestrictedOriginalRecommendation(recommendationId);
 
     if (!scrubbedStory) {
       throw new Error("editedScrub is required for edit_scrub");
@@ -556,7 +700,7 @@ export class PgPassStore implements JobStoragePort {
       enrichment: nextExtractResult.enrichment
     });
 
-    await this.saveScrubResult(recommendationId, {
+    await intakeStorage.saveScrubResult(recommendationId, {
       scrubbedStory,
       piiFindings: existingScrub.piiFindings,
       flags: existingScrub.flags,
@@ -564,8 +708,8 @@ export class PgPassStore implements JobStoragePort {
       source: existingScrub.source,
       promptId: "scrub@1"
     });
-    await this.saveExtractResult(recommendationId, nextExtractResult);
-    await this.saveQualityResult(recommendationId, nextQualityResult);
+    await intakeStorage.saveExtractResult(recommendationId, nextExtractResult);
+    await intakeStorage.saveQualityResult(recommendationId, nextQualityResult);
   }
 
   async getRecommendationEmbeddingSource(

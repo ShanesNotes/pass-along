@@ -38,6 +38,30 @@ export interface DeletionTombstoneInput {
   readonly now: Date;
 }
 
+// Optional capability (audit finding F2): a store that can run the whole
+// eight-step cascade atomically implements this too, additive to
+// LifecycleStoragePort the same way the port itself is additive to
+// JobStoragePort. deleteRecommendation() uses it when present so a crash
+// mid-cascade can't leave content deleted but no tombstone written (or vice
+// versa); storage that doesn't implement it (e.g. the in-memory test
+// double) just runs the steps sequentially as before.
+export interface TransactionalLifecycleStorage {
+  withLifecycleTransaction<T>(
+    fn: (tx: LifecycleStoragePort) => Promise<T>
+  ): Promise<T>;
+}
+
+export function hasTransactionalLifecycleStorage(
+  value: unknown
+): value is TransactionalLifecycleStorage {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { readonly withLifecycleTransaction?: unknown })
+      .withLifecycleTransaction === "function"
+  );
+}
+
 export function hasLifecycleStorage(
   value: unknown
 ): value is LifecycleStoragePort {

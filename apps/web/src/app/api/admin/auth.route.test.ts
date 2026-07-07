@@ -29,7 +29,10 @@ function handlerWithJwtSecret() {
 describe("GET /api/admin/queue with SUPABASE_JWT_SECRET configured", () => {
   test("authorizes a validly signed admin JWT", async () => {
     const handler = handlerWithJwtSecret();
-    const token = signHs256Jwt({ app_metadata: { role: "admin" } }, JWT_SECRET);
+    const token = signHs256Jwt(
+      { app_metadata: { role: "admin" }, exp: 9_999_999_999 },
+      JWT_SECRET
+    );
 
     const response = await handler(queueRequest(token));
 
@@ -69,7 +72,10 @@ describe("GET /api/admin/queue with SUPABASE_JWT_SECRET configured", () => {
 
   test("rejects a validly signed JWT missing the admin claim", async () => {
     const handler = handlerWithJwtSecret();
-    const token = signHs256Jwt({ role: "authenticated" }, JWT_SECRET);
+    const token = signHs256Jwt(
+      { role: "authenticated", exp: 9_999_999_999 },
+      JWT_SECRET
+    );
 
     const response = await handler(queueRequest(token));
 

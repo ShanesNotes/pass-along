@@ -13,7 +13,7 @@ function requestWithBearer(token: string | undefined): Request {
 describe("SupabaseJwtAuthenticator", () => {
   test("authorizes a token with app_metadata.role admin", () => {
     const token = signHs256Jwt(
-      { sub: "user-1", app_metadata: { role: "admin" } },
+      { sub: "user-1", app_metadata: { role: "admin" }, exp: 9_999_999_999 },
       SECRET
     );
     const authenticator = new SupabaseJwtAuthenticator(SECRET);
@@ -24,7 +24,10 @@ describe("SupabaseJwtAuthenticator", () => {
   });
 
   test("authorizes a token with a top-level role admin claim", () => {
-    const token = signHs256Jwt({ sub: "user-1", role: "admin" }, SECRET);
+    const token = signHs256Jwt(
+      { sub: "user-1", role: "admin", exp: 9_999_999_999 },
+      SECRET
+    );
     const authenticator = new SupabaseJwtAuthenticator(SECRET);
 
     expect(authenticator.authorize(requestWithBearer(token)).ok).toBe(true);
@@ -32,7 +35,7 @@ describe("SupabaseJwtAuthenticator", () => {
 
   test("rejects a token missing the admin claim", () => {
     const token = signHs256Jwt(
-      { sub: "user-1", role: "authenticated" },
+      { sub: "user-1", role: "authenticated", exp: 9_999_999_999 },
       SECRET
     );
     const authenticator = new SupabaseJwtAuthenticator(SECRET);

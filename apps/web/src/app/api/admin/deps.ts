@@ -27,6 +27,7 @@ import {
   type AppConfig
 } from "../../../../../../packages/core/src/index";
 import { createAdminAuthenticator } from "../../../../../../packages/engine/src/auth/index";
+import { AlreadyDecidedError } from "../../../../../../packages/engine/src/db/adapters/pass-store";
 
 export type AdminQueueResponse = {
   readonly queue: readonly AdminReviewQueueItem[];
@@ -110,16 +111,35 @@ export function createAdminDecidePostHandler(deps: AdminRouteDeps) {
       return json({ error: "RECOMMENDATION_NOT_REVIEW_PENDING" }, 409);
     }
 
-    const decision = await deps.store.decideAdminReview({
-      recommendationId: parsed.body.id,
-      action: parsed.body.action,
-      ...(parsed.body.editedScrub
-        ? { editedScrub: parsed.body.editedScrub }
-        : {}),
-      ...(parsed.body.reason ? { reason: parsed.body.reason } : {}),
-      reviewer: deps.reviewer ?? "demo-admin",
-      now: deps.now?.() ?? new Date()
-    });
+    let decision: AdminDecisionResult;
+
+    try {
+      decision = await deps.store.decideAdminReview({
+        recommendationId: parsed.body.id,
+        action: parsed.body.action,
+        ...(parsed.body.editedScrub
+          ? { editedScrub: parsed.body.editedScrub }
+          : {}),
+        ...(parsed.body.reason ? { reason: parsed.body.reason } : {}),
+        reviewer: deps.reviewer ?? "demo-admin",
+        now: deps.now?.() ?? new Date()
+      });
+    } catch (error) {
+      // Audit finding F2 (TOCTOU): the route's own pre-check above and the
+      // store's internal check both race against a concurrent decide on
+      // the same recommendation. AlreadyDecidedError is the clean, expected
+      // shape for "someone else's decide won" — a 409 naming the state it
+      // actually ended up in, not a 500.
+      if (error instanceof AlreadyDecidedError) {
+        return json(
+          { error: "RECOMMENDATION_ALREADY_DECIDED", status: error.status },
+          409
+        );
+      }
+
+      throw error;
+    }
+
     const embedding =
       decision.status === "published"
         ? await deps.embedApprovedRecommendation?.(parsed.body.id)

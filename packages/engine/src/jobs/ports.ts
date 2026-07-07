@@ -54,6 +54,17 @@ export interface JobStepRecord {
   readonly error?: JsonObject;
 }
 
+// Audit finding F4: a running claim older than this is presumed abandoned
+// (crashed worker, never reached its completed/failed write) and may be
+// reclaimed by a fresh attempt. Deliberately generous relative to any single
+// step's expected runtime.
+export const JOB_STEP_LEASE_MS = 30_000;
+
+export interface JobStepClaimResult {
+  readonly claimed: boolean;
+  readonly existing?: JobStepRecord;
+}
+
 export interface JobsDlqRow {
   readonly id: string;
   readonly jobName: string;
@@ -119,6 +130,16 @@ export interface JobStoragePort {
 
   getJobStep(idempotencyKey: string): Promise<JobStepRecord | undefined>;
   upsertJobStep(record: JobStepRecord): Promise<JobStepRecord>;
+
+  // Atomic claim (audit finding F4): a plain getJobStep-then-upsertJobStep
+  // is read-then-write and lets two concurrent deliveries of the same
+  // idempotency key both pass the "nothing running yet" check before either
+  // writes its claim. Implementers must make this a single atomic
+  // operation (an insert-or-conditional-update keyed on idempotencyKey,
+  // never a separate read then write). Only ever claims a fresh, failed, or
+  // stale (older than JOB_STEP_LEASE_MS and still "running") row — an
+  // already-"completed" row is never touched by this call.
+  claimJobStep(record: JobStepRecord): Promise<JobStepClaimResult>;
 
   writeDlq(input: WriteDlqInput): Promise<JobsDlqRow>;
   getDlqRow(dlqId: string): Promise<JobsDlqRow | undefined>;
@@ -341,6 +362,29 @@ export function createInMemoryJobStorage(): InMemoryJobStorage {
     async upsertJobStep(record) {
       jobSteps.set(record.idempotencyKey, record);
       return record;
+    },
+
+    async claimJobStep(record) {
+      // No `await` between the read and the write below, so nothing else
+      // can interleave here even under Promise.all — this is the same
+      // single-tick-atomicity guarantee a Postgres row lock gives, just for
+      // an in-process Map instead of a table.
+      const existing = jobSteps.get(record.idempotencyKey);
+
+      if (existing) {
+        const stale =
+          existing.status === "running" &&
+          record.updatedAt.getTime() - existing.updatedAt.getTime() >
+            JOB_STEP_LEASE_MS;
+        const reclaimable = existing.status === "failed" || stale;
+
+        if (!reclaimable) {
+          return { claimed: false, existing };
+        }
+      }
+
+      jobSteps.set(record.idempotencyKey, record);
+      return { claimed: true };
     },
 
     async writeDlq(input) {

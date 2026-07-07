@@ -1,6 +1,13 @@
 import type { StepApi } from "./runner.js";
 import type { JobStoragePort, JsonObject, JobStepRecord } from "./ports.js";
 
+export class JobStepInProgressError extends Error {
+  constructor(idempotencyKey: string) {
+    super(`Job step ${idempotencyKey} is already running elsewhere`);
+    this.name = "JobStepInProgressError";
+  }
+}
+
 export interface JobAttemptIdentity {
   readonly jobName: string;
   readonly entityId: string;
@@ -42,13 +49,7 @@ export async function runIdempotentStep<T>(
   now: Date
 ): Promise<T> {
   const idempotencyKey = jobStepKey(identity, stepName);
-  const existing = await storage.getJobStep(idempotencyKey);
-
-  if (existing?.status === "completed") {
-    return existing.result as T;
-  }
-
-  await storage.upsertJobStep({
+  const claim = await storage.claimJobStep({
     idempotencyKey,
     jobName: identity.jobName,
     entityId: identity.entityId,
@@ -57,6 +58,20 @@ export async function runIdempotentStep<T>(
     status: "running",
     updatedAt: now
   });
+
+  if (!claim.claimed) {
+    if (claim.existing?.status === "completed") {
+      return claim.existing.result as T;
+    }
+
+    // Genuinely concurrent with another still-running (non-stale) claim on
+    // this exact idempotency key: never execute the side effect a second
+    // time. The runner's own retry loop (runJob, up to maxAttempts) is what
+    // turns this into "try again shortly" rather than a hard failure — by
+    // the time of a retry the winner has likely finished and this step
+    // reads back a completed result via the fast path above.
+    throw new JobStepInProgressError(idempotencyKey);
+  }
 
   try {
     const result = await step.run(stepName, run);

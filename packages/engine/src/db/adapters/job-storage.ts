@@ -5,16 +5,18 @@ import {
   type SubmissionAction,
   type SubmissionState
 } from "../../../../core/src/index.js";
-import type {
-  AppendEventInput,
-  EventsOutboxRow,
-  JobStepRecord,
-  JobStoragePort,
-  JobsDlqRow,
-  ModerationEventRow,
-  PublishDecision,
-  TransitionRecordInput,
-  WriteDlqInput
+import {
+  JOB_STEP_LEASE_MS,
+  type AppendEventInput,
+  type EventsOutboxRow,
+  type JobStepClaimResult,
+  type JobStepRecord,
+  type JobStoragePort,
+  type JobsDlqRow,
+  type ModerationEventRow,
+  type PublishDecision,
+  type TransitionRecordInput,
+  type WriteDlqInput
 } from "../../jobs/ports.js";
 import type { SqlExecutor } from "../../retrieval/pgvector.js";
 
@@ -297,6 +299,48 @@ returning *
 
     const row = result.rows[0];
     return row ? jobStepFromRow(row) : undefined;
+  }
+
+  // Atomic claim (audit finding F4): a single INSERT ... ON CONFLICT DO
+  // UPDATE ... WHERE <reclaimable> RETURNING *. Postgres serializes
+  // concurrent statements that conflict on the same key (row-level lock
+  // under READ COMMITTED), so exactly one concurrent caller ever sees a
+  // returned row here — a completed row is never matched by the WHERE
+  // clause, so it's never touched by this call.
+  async claimJobStep(record: JobStepRecord): Promise<JobStepClaimResult> {
+    const leaseSeconds = JOB_STEP_LEASE_MS / 1000;
+    const claim = await this.sql.query<JobStepDbRow>(
+      `
+insert into public.job_steps
+  (idempotency_key, job_name, entity_id, attempt_group, step_name, status, updated_at)
+values ($1, $2, $3, $4, $5, 'running', $6)
+on conflict (idempotency_key) do update set
+  status = 'running',
+  updated_at = excluded.updated_at
+where public.job_steps.status = 'failed'
+   or (
+     public.job_steps.status = 'running'
+     and public.job_steps.updated_at < $6::timestamptz - make_interval(secs => $7)
+   )
+returning *
+`.trim(),
+      [
+        record.idempotencyKey,
+        record.jobName,
+        record.entityId,
+        record.attemptGroup,
+        record.stepName,
+        record.updatedAt,
+        leaseSeconds
+      ]
+    );
+
+    if (claim.rows[0]) {
+      return { claimed: true };
+    }
+
+    const existing = await this.getJobStep(record.idempotencyKey);
+    return { claimed: false, ...(existing ? { existing } : {}) };
   }
 
   async upsertJobStep(record: JobStepRecord): Promise<JobStepRecord> {
