@@ -93,7 +93,7 @@ describe("POST /api/find", () => {
   });
 
   test("keeps tier-1-only mode available when CRISIS_TIER2_OPTIONAL is explicit", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     try {
       const harness = await createHarness({
@@ -107,11 +107,11 @@ describe("POST /api/find", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(warn).toHaveBeenCalledWith("find.safety_gate_degraded", {
+      expect(degradedLogLine(log, "find.safety_gate_degraded")).toMatchObject({
         reason: "missing_api_key"
       });
     } finally {
-      warn.mockRestore();
+      log.mockRestore();
     }
   });
 
@@ -282,7 +282,7 @@ describe("POST /api/find", () => {
   });
 
   test("warns and annotates the find event when the safety gate is degraded", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const text = "Looking for teen anxiety CBT in Denver";
 
     try {
@@ -314,7 +314,7 @@ describe("POST /api/find", () => {
         location: "Denver"
       });
 
-      expect(warn).toHaveBeenCalledWith("find.safety_gate_degraded", {
+      expect(degradedLogLine(log, "find.safety_gate_degraded")).toMatchObject({
         reason: "missing_api_key"
       });
       const parsedEvent = EventCatalogSchema.parse(harness.events[0]);
@@ -324,9 +324,9 @@ describe("POST /api/find", () => {
           degraded: true
         }
       });
-      expect(JSON.stringify(warn.mock.calls)).not.toContain(text);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(text);
     } finally {
-      warn.mockRestore();
+      log.mockRestore();
     }
   });
 
@@ -623,6 +623,21 @@ function understoodFixture(
     confidence: 0.8,
     ...overrides
   };
+}
+
+function degradedLogLine(
+  log: ReturnType<typeof vi.spyOn>,
+  event: string
+): Record<string, unknown> {
+  const call = log.mock.calls.find((args) =>
+    typeof args[0] === "string" && (args[0] as string).includes(event)
+  );
+
+  if (!call) {
+    throw new Error(`no console.log call found for event ${event}`);
+  }
+
+  return JSON.parse(call[0] as string) as Record<string, unknown>;
 }
 
 function clock(values: readonly number[]) {

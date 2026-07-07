@@ -13,12 +13,15 @@ import {
   safetyGate as defaultSafetyGate,
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index";
-import type {
-  EventCatalog,
-  RecEnrichment,
-  RecEnrichmentTag,
-  SubmissionAction,
-  SubmissionState
+import { logger } from "../../../../../../packages/engine/src/http/index";
+import {
+  loadConfig,
+  type AppConfig,
+  type EventCatalog,
+  type RecEnrichment,
+  type RecEnrichmentTag,
+  type SubmissionAction,
+  type SubmissionState
 } from "../../../../../../packages/core/src/index";
 import {
   extractStory,
@@ -187,6 +190,7 @@ export interface PassRouteDeps {
   readonly store: PassDemoStore;
   readonly runner: ReturnType<typeof createInlineJobRunner>;
   readonly env?: NodeJS.ProcessEnv;
+  readonly config?: AppConfig;
   readonly safetyGate?: (story: string) => Promise<SafetyGateResult>;
   readonly now?: () => Date;
 }
@@ -203,7 +207,7 @@ let defaultDeps: PassRouteDeps | undefined;
 
 export function createPassPostHandler(deps: PassRouteDeps) {
   return async (request: Request): Promise<Response> => {
-    const env = deps.env ?? process.env;
+    const config = deps.config ?? loadConfig(deps.env);
     const parsed = parsePassRequestBody(await readJson(request), deps.store);
 
     if (!parsed.ok) {
@@ -211,7 +215,7 @@ export function createPassPostHandler(deps: PassRouteDeps) {
     }
 
     const gate = await routeSafetyGate(
-      deps.safetyGate ?? defaultRouteSafetyGate(env),
+      deps.safetyGate ?? defaultRouteSafetyGate(config),
       parsed.body.story
     );
 
@@ -244,11 +248,12 @@ export function createPassPostHandler(deps: PassRouteDeps) {
 
 export function defaultPassRouteDeps(): PassRouteDeps {
   if (!defaultDeps) {
+    const config = loadConfig();
     const store = createPassDemoStore(fixtureProviders);
 
     defaultDeps = {
       store,
-      env: process.env,
+      config,
       runner: createInlineJobRunner({
         storage: store,
         jobs: JOB_DEFINITIONS
@@ -738,8 +743,8 @@ function reviewStatusFor(state: SubmissionState): string {
   return "Intake is still processing this story.";
 }
 
-function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
-  return (story: string) => defaultSafetyGate(story, { env });
+function defaultRouteSafetyGate(config: AppConfig) {
+  return (story: string) => defaultSafetyGate(story, { config });
 }
 
 async function routeSafetyGate(
@@ -762,7 +767,7 @@ function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
     return;
   }
 
-  console.warn("pass.safety_gate_degraded", {
+  logger.log("pass.safety_gate_degraded", {
     reason: gate.tier2.reason
   });
 }

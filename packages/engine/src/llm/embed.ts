@@ -1,3 +1,7 @@
+import {
+  loadConfig,
+  type AppConfig
+} from "../../../core/src/index.js";
 import { createHash } from "node:crypto";
 import { MissingKeyError, ProviderHttpError, type Transport } from "./adapter.js";
 import { normalizeVector } from "../retrieval/cosine.js";
@@ -13,6 +17,7 @@ export const DEV_ONLY_HASH_EMBEDDING_MODEL_VERSION = "dev-only-v1";
 
 export interface EmbedTextOptions {
   readonly env?: NodeJS.ProcessEnv;
+  readonly config?: AppConfig;
   readonly transport?: Transport;
   readonly timeoutMs?: number;
   readonly inference_geo?: string;
@@ -37,8 +42,8 @@ export async function embedText(
   text: string,
   opts: EmbedTextOptions = {}
 ): Promise<EmbeddingResult> {
-  const env = opts.env ?? process.env;
-  const apiKey = env.OPENAI_API_KEY;
+  const config = opts.config ?? loadConfig(opts.env);
+  const apiKey = config.models.openaiApiKey;
 
   if (!apiKey) {
     throw new MissingKeyError("openai", "OPENAI_API_KEY");

@@ -1,3 +1,4 @@
+import { ConfigError } from "../../../core/src/index.js";
 import {
   MissingKeyError,
   complete,
@@ -38,6 +39,7 @@ export type SafetyClassifierResult =
 export type SafetyClassifyOptions = Pick<
   CompleteOptions,
   | "env"
+  | "config"
   | "transport"
   | "timeoutMs"
   | "maxRetries"
@@ -81,6 +83,10 @@ export async function safetyClassify(
       model: completion.model
     };
   } catch (error) {
+    if (error instanceof ConfigError) {
+      throw error;
+    }
+
     if (error instanceof MissingKeyError) {
       return {
         status: "skipped",

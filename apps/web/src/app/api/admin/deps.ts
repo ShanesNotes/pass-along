@@ -22,6 +22,10 @@ import {
   type AdminReviewQueueItem,
   type PassDemoStore
 } from "../pass/deps";
+import {
+  loadConfig,
+  type AppConfig
+} from "../../../../../../packages/core/src/index";
 
 export type AdminQueueResponse = {
   readonly queue: readonly AdminReviewQueueItem[];
@@ -34,6 +38,7 @@ export type AdminDecisionResponse = AdminDecisionResult & {
 export interface AdminRouteDeps {
   readonly store: PassDemoStore;
   readonly env?: NodeJS.ProcessEnv;
+  readonly config?: AppConfig;
   readonly now?: () => Date;
   readonly reviewer?: string;
   readonly embedApprovedRecommendation?: (
@@ -50,10 +55,11 @@ type AdminDecisionBody = {
 
 export function defaultAdminRouteDeps(): AdminRouteDeps {
   const passDeps = defaultPassRouteDeps();
+  const config = passDeps.config ?? loadConfig(passDeps.env);
 
   return {
     store: passDeps.store,
-    env: process.env,
+    config,
     embedApprovedRecommendation: (recommendationId) =>
       embedApprovedRecommendationInFindStore({
         passStore: passDeps.store,
@@ -65,7 +71,8 @@ export function defaultAdminRouteDeps(): AdminRouteDeps {
 
 export function createAdminQueueGetHandler(deps: AdminRouteDeps) {
   return async (request: Request): Promise<Response> => {
-    const auth = authorizeAdmin(request, deps.env);
+    const config = deps.config ?? loadConfig(deps.env);
+    const auth = authorizeAdmin(request, config);
 
     if (!auth.ok) {
       return auth.response;
@@ -79,7 +86,8 @@ export function createAdminQueueGetHandler(deps: AdminRouteDeps) {
 
 export function createAdminDecidePostHandler(deps: AdminRouteDeps) {
   return async (request: Request): Promise<Response> => {
-    const auth = authorizeAdmin(request, deps.env);
+    const config = deps.config ?? loadConfig(deps.env);
+    const auth = authorizeAdmin(request, config);
 
     if (!auth.ok) {
       return auth.response;
@@ -165,11 +173,11 @@ export async function embedApprovedRecommendationInFindStore(input: {
 
 function authorizeAdmin(
   request: Request,
-  env: NodeJS.ProcessEnv = process.env
+  config: AppConfig
 ):
   | { readonly ok: true }
   | { readonly ok: false; readonly response: Response } {
-  const expectedToken = env.ADMIN_DEMO_TOKEN?.trim();
+  const expectedToken = config.admin.demoToken;
 
   if (!expectedToken) {
     return {

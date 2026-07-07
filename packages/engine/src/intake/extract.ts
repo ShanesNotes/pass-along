@@ -1,4 +1,5 @@
 import {
+  ConfigError,
   ISSUE_TERMS,
   MODALITY_TERMS,
   RecEnrichmentSchema,
@@ -9,7 +10,6 @@ import { loadPrompt } from "../../../prompts/src/index.js";
 import { complete } from "../llm/adapter.js";
 import type { PiiFinding } from "./scrub.js";
 import {
-  googleEnv,
   normalizeText,
   parseJsonObject,
   type IntakeModelOptions,
@@ -137,7 +137,11 @@ export async function extractStory(
     if (modeled) {
       return modeled;
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      throw error;
+    }
+
     // Dev/test fallback is deterministic and avoids retaining raw model errors.
   }
 
@@ -192,10 +196,7 @@ async function modelExtractStory(
         }
       ]
     },
-    {
-      ...options,
-      env: googleEnv(options.env ?? process.env)
-    }
+    options
   );
   const parsed = parseJsonObject(completion.text);
   const result = RecEnrichmentSchema.safeParse(parsed);

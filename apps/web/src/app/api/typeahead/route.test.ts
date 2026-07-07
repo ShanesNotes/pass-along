@@ -50,6 +50,10 @@ describe("POST /api/typeahead", () => {
   });
 
   test("does not log or persist the provider-name query", async () => {
+    // The route guard's access log (http.request: request_id/route/status/
+    // latency_ms only, allowlist-enforced) is expected here. The invariant
+    // under test is that the query text itself never rides along on any log
+    // line, not that logging never happens.
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -59,7 +63,6 @@ describe("POST /api/typeahead", () => {
       const response = await POST(postRequest(providerName));
 
       expect(response.status).toBe(200);
-      expect(log).not.toHaveBeenCalled();
       expect(warn).not.toHaveBeenCalled();
       expect(error).not.toHaveBeenCalled();
       expect(JSON.stringify(log.mock.calls)).not.toContain(providerName);

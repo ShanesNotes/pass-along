@@ -34,11 +34,14 @@ import {
   type RerankEngineWarn,
   type RerankOutcome
 } from "../../../../../../packages/engine/src/rerank/index";
+import { logger } from "../../../../../../packages/engine/src/http/index";
 import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index";
-import type {
-  EventCatalog,
-  RerankSource,
-  UnderstoodQuery
+import {
+  loadConfig,
+  type AppConfig,
+  type EventCatalog,
+  type RerankSource,
+  type UnderstoodQuery
 } from "../../../../../../packages/core/src/index";
 
 export type FindPerformedEvent = Extract<
@@ -67,6 +70,7 @@ export interface FindRerankInput {
 
 export interface FindRouteDeps {
   readonly env?: NodeJS.ProcessEnv;
+  readonly config?: AppConfig;
   readonly corpus: RetrievalCorpus;
   readonly store: VectorStorePort;
   readonly events: FindEventsPort;
@@ -105,7 +109,7 @@ let defaultDepsPromise: Promise<FindRouteDeps> | undefined;
 
 export function createFindPostHandler(deps: FindRouteDeps) {
   return async (request: Request): Promise<Response> => {
-    const env = deps.env ?? process.env;
+    const config = deps.config ?? loadConfig(deps.env);
 
     const parsed = parseFindRequestBody(await readJson(request));
 
@@ -116,7 +120,7 @@ export function createFindPostHandler(deps: FindRouteDeps) {
     const startedAt = deps.now?.() ?? performance.now();
     const body = parsed.body;
     const gate = await routeSafetyGate(
-      deps.safetyGate ?? defaultRouteSafetyGate(env),
+      deps.safetyGate ?? defaultRouteSafetyGate(config),
       body.text
     );
 
@@ -132,7 +136,7 @@ export function createFindPostHandler(deps: FindRouteDeps) {
 
     const queryHash = sha256(body.text);
     const [understanding, embedding] = await Promise.all([
-      (deps.understand ?? defaultRouteUnderstand(env))(body.text),
+      (deps.understand ?? defaultRouteUnderstand(config))(body.text),
       deps.embed(body.text)
     ]);
     const understoodJson = understoodWithRequestOverrides(
@@ -170,7 +174,7 @@ export function createFindPostHandler(deps: FindRouteDeps) {
       filters,
       topN: DEFAULT_RETRIEVAL_TOP_N
     });
-    const reranked = await (deps.rerank ?? defaultRouteRerank(env))({
+    const reranked = await (deps.rerank ?? defaultRouteRerank(config))({
       understood: understoodJson,
       matches,
       corpus: deps.corpus
@@ -227,6 +231,7 @@ export async function defaultFindRouteDeps(): Promise<FindRouteDeps> {
 }
 
 async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
+  const config = loadConfig();
   const corpus = fixtureCorpusJson as RetrievalCorpus;
   const embed = async (text: string) => {
     const embedding = embedTextDevOnly(text);
@@ -235,11 +240,10 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
   const store = await createInMemoryVectorStoreFromCorpus(corpus, embed);
 
   return {
+    config,
     corpus,
     store,
     embed,
-    safetyGate: (text) => defaultSafetyGate(text, { env: process.env }),
-    understand: (text) => defaultUnderstandQuery(text, { env: process.env }),
     events: {
       async emit() {
         return undefined;
@@ -248,8 +252,8 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
   };
 }
 
-function defaultRouteSafetyGate(env: NodeJS.ProcessEnv) {
-  return (text: string) => defaultSafetyGate(text, { env });
+function defaultRouteSafetyGate(config: AppConfig) {
+  return (text: string) => defaultSafetyGate(text, { config });
 }
 
 async function routeSafetyGate(
@@ -267,17 +271,17 @@ async function routeSafetyGate(
   }
 }
 
-function defaultRouteUnderstand(env: NodeJS.ProcessEnv) {
-  return (text: string) => defaultUnderstandQuery(text, { env });
+function defaultRouteUnderstand(config: AppConfig) {
+  return (text: string) => defaultUnderstandQuery(text, { config });
 }
 
-function defaultRouteRerank(env: NodeJS.ProcessEnv) {
+function defaultRouteRerank(config: AppConfig) {
   return (input: FindRerankInput) =>
     rerankMatches({
       understood: input.understood,
       matches: input.matches,
       corpus: input.corpus,
-      options: { env },
+      options: { config },
       warn: warnRerank
     });
 }
@@ -287,13 +291,13 @@ function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
     return;
   }
 
-  console.warn("find.safety_gate_degraded", {
+  logger.log("find.safety_gate_degraded", {
     reason: gate.tier2.reason
   });
 }
 
 const warnRerank: RerankEngineWarn = (event, fields) => {
-  console.warn(event, fields);
+  logger.log(event, fields);
 };
 
 function orderMatchesByRerank(

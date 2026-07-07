@@ -1,11 +1,13 @@
-import type { RecEnrichment } from "../../../core/src/index.js";
+import {
+  ConfigError,
+  type RecEnrichment
+} from "../../../core/src/index.js";
 import { loadPrompt } from "../../../prompts/src/index.js";
 import { complete } from "../llm/adapter.js";
 import {
   asRecord,
   asStringArray,
   getString,
-  googleEnv,
   normalizeText,
   parseJsonObject,
   type IntakeModelOptions,
@@ -52,7 +54,11 @@ export async function scrubStory(
     if (modeled) {
       return modeled;
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      throw error;
+    }
+
     // The intake route is allowed to run without model credentials in dev/tests.
   }
 
@@ -93,10 +99,7 @@ async function modelScrubStory(
         }
       ]
     },
-    {
-      ...options,
-      env: googleEnv(options.env ?? process.env)
-    }
+    options
   );
   const parsed = parseScrubJson(completion.text);
 
@@ -406,4 +409,3 @@ function numericField(
 
   return typeof value === "number" ? value : undefined;
 }
-

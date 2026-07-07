@@ -1,4 +1,5 @@
 import {
+  ConfigError,
   ISSUE_TERMS,
   MODALITY_TERMS,
   UnderstoodQuerySchema,
@@ -23,6 +24,7 @@ export interface UnderstandQueryResult {
 export type UnderstandQueryOptions = Pick<
   CompleteOptions,
   | "env"
+  | "config"
   | "transport"
   | "timeoutMs"
   | "maxRetries"
@@ -181,6 +183,10 @@ export async function understandQuery(
 
     warnUnderstandDegraded("invalid_model_response");
   } catch (error) {
+    if (error instanceof ConfigError) {
+      throw error;
+    }
+
     warnUnderstandDegraded(error);
   }
 
@@ -274,8 +280,6 @@ async function modelUnderstand(
   input: string,
   options: UnderstandQueryOptions
 ): Promise<UnderstoodQuery | undefined> {
-  const env = googleEnv(options.env ?? process.env);
-
   for (const repair of [false, true]) {
     const completion = await complete(
       UNDERSTAND_PROMPT_ID,
@@ -300,10 +304,7 @@ async function modelUnderstand(
             : [])
         ]
       },
-      {
-        ...options,
-        env
-      }
+      options
     );
     const parsed = parseUnderstoodJson(completion.text);
 
@@ -317,17 +318,6 @@ async function modelUnderstand(
 
 function understandPrompt(): string {
   return UNDERSTAND_2_PROMPT;
-}
-
-function googleEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (env.GOOGLE_API_KEY || !env.GEMINI_API_KEY) {
-    return env;
-  }
-
-  return {
-    ...env,
-    GOOGLE_API_KEY: env.GEMINI_API_KEY
-  };
 }
 
 function parseUnderstoodJson(text: string): UnderstoodQuery | undefined {

@@ -1,4 +1,8 @@
 import {
+  loadConfig,
+  type AppConfig
+} from "../../../core/src/index.js";
+import {
   getPromptRoute,
   type LlmProvider,
   type PromptRoute
@@ -47,6 +51,7 @@ export type CompleteOptions = {
   transport?: Transport;
   sleep?: SleepFn;
   env?: NodeJS.ProcessEnv;
+  config?: AppConfig;
 };
 
 type NormalizedInput = {
@@ -71,8 +76,8 @@ export async function complete(
   opts: CompleteOptions = {}
 ): Promise<CompletionResult> {
   const route = getPromptRoute(promptId);
-  const env = opts.env ?? process.env;
-  const apiKey = readApiKey(route.provider, env);
+  const config = opts.config ?? loadConfig(opts.env);
+  const apiKey = readApiKey(route.provider, config);
   const normalizedInput = normalizeInput(input);
   const transport = opts.transport ?? fetch;
   const sleep = opts.sleep ?? defaultSleep;
@@ -136,16 +141,30 @@ export async function complete(
 
 function readApiKey(
   provider: LlmProvider,
-  env: NodeJS.ProcessEnv
+  config: AppConfig
 ): string {
   const envVar = apiKeyEnvVar(provider);
-  const value = env[envVar];
+  const value = apiKeyForProvider(provider, config);
 
   if (!value) {
     throw new MissingKeyError(provider, envVar);
   }
 
   return value;
+}
+
+function apiKeyForProvider(
+  provider: LlmProvider,
+  config: AppConfig
+): string | undefined {
+  switch (provider) {
+    case "anthropic":
+      return config.models.anthropicApiKey;
+    case "openai":
+      return config.models.openaiApiKey;
+    case "google":
+      return config.models.googleApiKey;
+  }
 }
 
 function apiKeyEnvVar(provider: LlmProvider): string {

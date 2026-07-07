@@ -1,4 +1,8 @@
 import {
+  ConfigError,
+  loadConfig
+} from "../../../core/src/index.js";
+import {
   matchSafetyRules,
   type Tier1SafetyResult
 } from "./rules/loader.js";
@@ -44,6 +48,7 @@ export async function safetyGate(
   input: string,
   options: SafetyGateOptions = {}
 ): Promise<SafetyGateResult> {
+  const config = options.config ?? loadConfig(options.env);
   const tier1Promise = Promise.resolve(
     (options.ruleMatcher ?? matchSafetyRules)(input)
   );
@@ -53,7 +58,7 @@ export async function safetyGate(
   if (
     tier2.status === "skipped" &&
     tier2.reason === "missing_api_key" &&
-    !tier2Optional(options.env ?? process.env)
+    !config.safety.tier2Optional
   ) {
     throw new SafetyGateUnavailableError(tier2.missingEnvVar);
   }
@@ -66,10 +71,6 @@ export async function safetyGate(
   };
 }
 
-function tier2Optional(env: NodeJS.ProcessEnv): boolean {
-  return env.CRISIS_TIER2_OPTIONAL === "1";
-}
-
 async function runClassifier(
   input: string,
   options: SafetyGateOptions
@@ -77,6 +78,10 @@ async function runClassifier(
   try {
     return await (options.classifier?.(input) ?? safetyClassify(input, options));
   } catch (error) {
+    if (error instanceof ConfigError) {
+      throw error;
+    }
+
     return {
       status: "failed_closed",
       promptId: CRISIS_GATE_PROMPT_ID,

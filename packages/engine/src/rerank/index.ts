@@ -1,4 +1,7 @@
 import {
+  ConfigError,
+  DEFAULT_CONFIG_RERANK_TIMEOUT_MS,
+  loadConfig,
   RerankModelOutputSchema,
   type RerankCandidate,
   type RerankModelOutput,
@@ -23,7 +26,7 @@ import {
 
 export const RERANK_PROMPT_ID = "rerank@1";
 export const DEFAULT_RERANK_LIMIT = 6;
-export const DEFAULT_RERANK_TIMEOUT_MS = 8_000;
+export const DEFAULT_RERANK_TIMEOUT_MS = DEFAULT_CONFIG_RERANK_TIMEOUT_MS;
 
 export interface RerankOutcome {
   readonly source: RerankSource;
@@ -34,6 +37,7 @@ export interface RerankOutcome {
 export type RerankOptions = Pick<
   CompleteOptions,
   | "env"
+  | "config"
   | "transport"
   | "timeoutMs"
   | "maxRetries"
@@ -117,6 +121,10 @@ export async function rerankCandidates(input: {
       candidates: input.candidates
     };
   } catch (error) {
+    if (error instanceof ConfigError) {
+      throw error;
+    }
+
     warnRerankDegraded(input.warn, degradedReason(error));
 
     return {
@@ -196,9 +204,9 @@ async function modelRerank(input: {
   readonly candidates: readonly RerankCandidate[];
   readonly options?: RerankOptions;
 }): Promise<RerankModelOutput | undefined> {
-  const env = googleEnv(input.options?.env ?? process.env);
+  const config = input.options?.config ?? loadConfig(input.options?.env);
   const timeoutMs =
-    input.options?.timeoutMs ?? rerankTimeoutMsFromEnv(env);
+    input.options?.timeoutMs ?? config.rerank.timeoutMs;
 
   for (const repair of [false, true]) {
     const completion = await complete(
@@ -226,7 +234,7 @@ async function modelRerank(input: {
       },
       {
         ...input.options,
-        env,
+        config,
         timeoutMs,
         maxRetries: input.options?.maxRetries ?? 0
       }
@@ -239,22 +247,6 @@ async function modelRerank(input: {
   }
 
   return undefined;
-}
-
-function rerankTimeoutMsFromEnv(env: NodeJS.ProcessEnv): number {
-  const rawValue = env.RERANK_TIMEOUT_MS?.trim();
-
-  if (!rawValue || !/^\d+$/u.test(rawValue)) {
-    return DEFAULT_RERANK_TIMEOUT_MS;
-  }
-
-  const parsed = Number(rawValue);
-
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    return DEFAULT_RERANK_TIMEOUT_MS;
-  }
-
-  return parsed;
 }
 
 function parseRerankJson(text: string): RerankModelOutput | undefined {
@@ -349,17 +341,6 @@ function degradedReason(error: unknown): string {
   }
 
   return "unknown";
-}
-
-function googleEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (env.GOOGLE_API_KEY || !env.GEMINI_API_KEY) {
-    return env;
-  }
-
-  return {
-    ...env,
-    GOOGLE_API_KEY: env.GEMINI_API_KEY
-  };
 }
 
 function unique(values: readonly string[]): readonly string[] {

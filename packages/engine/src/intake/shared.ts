@@ -5,6 +5,7 @@ export type IntakeSource = "model" | "fallback";
 export type IntakeModelOptions = Pick<
   CompleteOptions,
   | "env"
+  | "config"
   | "transport"
   | "timeoutMs"
   | "maxRetries"
@@ -12,17 +13,6 @@ export type IntakeModelOptions = Pick<
   | "inference_geo"
   | "sleep"
 >;
-
-export function googleEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (env.GOOGLE_API_KEY || !env.GEMINI_API_KEY) {
-    return env;
-  }
-
-  return {
-    ...env,
-    GOOGLE_API_KEY: env.GEMINI_API_KEY
-  };
-}
 
 export function parseJsonObject(text: string): Record<string, unknown> | undefined {
   const trimmed = text.trim();
@@ -79,4 +69,3 @@ export function normalizeText(value: string): string {
     .replace(/\s+/gu, " ")
     .trim();
 }
-

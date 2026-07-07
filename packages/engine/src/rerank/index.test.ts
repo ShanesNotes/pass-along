@@ -172,17 +172,21 @@ describe("rerankCandidates", () => {
     expect(outcome.results[0]?.why).toBe("Keystone A");
   });
 
-  test("ignores malformed RERANK_TIMEOUT_MS values", async () => {
-    const outcome = await runHangingRerankUntilTimeout({
-      env: {
-        GOOGLE_API_KEY: "test-google-key",
-        RERANK_TIMEOUT_MS: "1100ms"
-      },
-      expectedTimeoutMs: 8_000
-    });
-
-    expect(outcome.source).toBe("fallback");
-    expect(outcome.results[0]?.why).toBe("Keystone A");
+  test("throws on malformed RERANK_TIMEOUT_MS values", async () => {
+    await expect(
+      rerankCandidates({
+        understood: understoodFixture(),
+        candidates: [
+          candidate("provider_a", "provider_a:rec_1:keystone", "Keystone A")
+        ],
+        options: {
+          env: {
+            GOOGLE_API_KEY: "test-google-key",
+            RERANK_TIMEOUT_MS: "1100ms"
+          }
+        }
+      })
+    ).rejects.toThrow(/RERANK_TIMEOUT_MS.*positive integer/u);
   });
 });
 

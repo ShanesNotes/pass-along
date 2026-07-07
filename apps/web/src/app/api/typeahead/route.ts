@@ -5,8 +5,19 @@ import {
   type ProviderNameMatch,
   type ProviderNameSearchPort
 } from "../../../../../../packages/engine/src/retrieval/typeahead";
+import {
+  InMemoryTokenBucketRateLimiter,
+  ratePerMinute,
+  withRouteGuard
+} from "../../../../../../packages/engine/src/http/index";
+import { loadConfig } from "../../../../../../packages/core/src/index";
 
 export const runtime = "nodejs";
+
+const routeConfig = loadConfig();
+const typeaheadRateLimiter = new InMemoryTokenBucketRateLimiter(
+  ratePerMinute(routeConfig.rateLimit.typeaheadPerMinute)
+);
 
 interface TypeaheadApiResult {
   readonly id: string;
@@ -26,19 +37,25 @@ interface TypeaheadRouteDeps {
 let defaultDepsPromise: Promise<TypeaheadRouteDeps> | undefined;
 
 export async function POST(request: Request): Promise<Response> {
-  const deps = await defaultTypeaheadRouteDeps();
-  const q = qFromBody(await readJson(request));
+  return withRouteGuard(
+    request,
+    { route: "typeahead", limiter: typeaheadRateLimiter },
+    async (req) => {
+      const deps = await defaultTypeaheadRouteDeps();
+      const q = qFromBody(await readJson(req));
 
-  if (q.trim().length === 0) {
-    return json({ results: [] });
-  }
+      if (q.trim().length === 0) {
+        return json({ results: [] });
+      }
 
-  const results = await deps.providerSearch.searchProvidersByName({
-    query: q,
-    limit: deps.limit ?? 5
-  });
+      const results = await deps.providerSearch.searchProvidersByName({
+        query: q,
+        limit: deps.limit ?? 5
+      });
 
-  return json({ results: results.map(toApiResult) });
+      return json({ results: results.map(toApiResult) });
+    }
+  );
 }
 
 async function readJson(request: Request): Promise<unknown> {
