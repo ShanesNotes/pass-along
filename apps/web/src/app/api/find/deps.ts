@@ -27,6 +27,7 @@ import {
 import {
   clarifyQuestionFor,
   understandQuery as defaultUnderstandQuery,
+  type UnderstandEngineWarn,
   type UnderstandQueryResult
 } from "../../../../../../packages/engine/src/understand/index";
 import {
@@ -35,6 +36,7 @@ import {
   type RerankOutcome
 } from "../../../../../../packages/engine/src/rerank/index";
 import { logger } from "../../../../../../packages/engine/src/http/index";
+import { createStores } from "../../../../../../packages/engine/src/db/stores";
 import type { EmbeddingMetadata } from "../../../../../../packages/engine/src/retrieval/index";
 import {
   loadConfig,
@@ -237,7 +239,12 @@ async function createDefaultFindRouteDeps(): Promise<FindRouteDeps> {
     const embedding = embedTextDevOnly(text);
     return { vector: embedding.vector, metadata: embedding.metadata };
   };
-  const store = await createInMemoryVectorStoreFromCorpus(corpus, embed);
+  // DB-backed VectorStore when DATABASE_URL is set (expects migrations
+  // applied + real data, not the fixture corpus); otherwise the in-memory
+  // store seeded from the fixture corpus, unchanged from before.
+  const store =
+    createStores(config)?.vectorStore ??
+    (await createInMemoryVectorStoreFromCorpus(corpus, embed));
 
   return {
     config,
@@ -272,8 +279,13 @@ async function routeSafetyGate(
 }
 
 function defaultRouteUnderstand(config: AppConfig) {
-  return (text: string) => defaultUnderstandQuery(text, { config });
+  return (text: string) =>
+    defaultUnderstandQuery(text, { config, warn: warnUnderstand });
 }
+
+const warnUnderstand: UnderstandEngineWarn = (event, fields) => {
+  logger.log(event, fields);
+};
 
 function defaultRouteRerank(config: AppConfig) {
   return (input: FindRerankInput) =>

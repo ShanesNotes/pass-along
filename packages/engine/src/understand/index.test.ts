@@ -18,6 +18,53 @@ const validUnderstood = {
   confidence: 0.87
 };
 
+describe("understandQuery degradation warn", () => {
+  test("calls the injected warn callback instead of console.warn when provided", async () => {
+    const warn = vi.fn();
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const transport = vi.fn<Transport>(async () => {
+      throw new TypeError("boom");
+    });
+
+    try {
+      await understandQuery("teen anxiety CBT in Denver", {
+        env: { GEMINI_API_KEY: "test-key" },
+        transport,
+        maxRetries: 0,
+        warn
+      });
+
+      expect(warn).toHaveBeenCalledWith("find.understand_degraded", {
+        reason: "TypeError"
+      });
+      expect(consoleWarn).not.toHaveBeenCalled();
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
+  test("falls back to console.warn when no warn callback is provided", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const transport = vi.fn<Transport>(async () => {
+      throw new TypeError("boom");
+    });
+
+    try {
+      await understandQuery("teen anxiety CBT in Denver", {
+        env: { GEMINI_API_KEY: "test-key" },
+        transport,
+        maxRetries: 0
+      });
+
+      expect(consoleWarn).toHaveBeenCalledWith("find.understand_degraded", {
+        reason: "TypeError"
+      });
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+});
+
 describe("understandQuery", () => {
   test("does not read prompt files on the model runtime path", async () => {
     vi.resetModules();

@@ -21,6 +21,11 @@ export interface UnderstandQueryResult {
   readonly source: UnderstandSource;
 }
 
+export type UnderstandEngineWarn = (
+  event: "find.understand_degraded",
+  fields: { readonly reason: string }
+) => void;
+
 export type UnderstandQueryOptions = Pick<
   CompleteOptions,
   | "env"
@@ -31,7 +36,9 @@ export type UnderstandQueryOptions = Pick<
   | "backoffBaseMs"
   | "inference_geo"
   | "sleep"
->;
+> & {
+  readonly warn?: UnderstandEngineWarn;
+};
 
 type PatternDictionary<T extends string> = Record<T, readonly RegExp[]>;
 
@@ -181,13 +188,13 @@ export async function understandQuery(
       return { understood: modeled, source: "model" };
     }
 
-    warnUnderstandDegraded("invalid_model_response");
+    warnUnderstandDegraded(options.warn, "invalid_model_response");
   } catch (error) {
     if (error instanceof ConfigError) {
       throw error;
     }
 
-    warnUnderstandDegraded(error);
+    warnUnderstandDegraded(options.warn, error);
   }
 
   return { understood: fallbackUnderstandQuery(input), source: "fallback" };
@@ -347,10 +354,13 @@ function parseJsonObject(text: string): unknown | undefined {
   }
 }
 
-function warnUnderstandDegraded(error: unknown): void {
-  console.warn("find.understand_degraded", {
-    reason: degradedReason(error)
-  });
+function warnUnderstandDegraded(
+  warn: UnderstandEngineWarn | undefined,
+  error: unknown
+): void {
+  const emit = warn ?? ((event, fields) => console.warn(event, fields));
+
+  emit("find.understand_degraded", { reason: degradedReason(error) });
 }
 
 function degradedReason(error: unknown): string {
