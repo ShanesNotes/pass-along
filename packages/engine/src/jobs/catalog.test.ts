@@ -21,7 +21,7 @@ describe("jobs catalog", () => {
   test("covers the spec event and job catalog", () => {
     expect(EVENT_DEFINITIONS.map((event) => event.type)).toEqual(EVENT_TYPES);
     expect(JOB_DEFINITIONS.map((job) => job.name)).toEqual(JOB_NAMES);
-    expect(JOB_DEFINITIONS).toHaveLength(13);
+    expect(JOB_DEFINITIONS).toHaveLength(14);
   });
 
   test("drives a fake submission received to published", async () => {
@@ -162,6 +162,34 @@ describe("jobs catalog", () => {
     await expect(
       storage.listModerationEvents("rec-idempotent")
     ).resolves.toHaveLength(transitionCount);
+  });
+
+  test("deleteSubmission ignores moderation.decided events that aren't a removal", async () => {
+    const { storage, runner } = createHarness();
+    storage.setPublishDecision("rec-approve-only", { outcome: "publish" });
+
+    await runner.dispatch(submissionReceived("rec-approve-only"), {
+      eventId: "event-approve-only"
+    });
+    await runner.dispatch(
+      {
+        type: "moderation.decided",
+        payload: {
+          recommendation_id: "rec-approve-only",
+          action: "approve",
+          reviewer: "reviewer-1"
+        }
+      },
+      { eventId: "event-moderation-approve-only" }
+    );
+
+    // deleteSubmission is wired to moderation.decided but only acts on
+    // action:"remove" — an "approve" decision must not touch the
+    // recommendation's state (no lifecycle-capable storage is even present
+    // here, so a "remove" would report storage_unavailable rather than throw).
+    await expect(
+      storage.getRecommendationState("rec-approve-only")
+    ).resolves.toBe("published");
   });
 
   test("keeps queue SDK imports contained in runner.ts", () => {

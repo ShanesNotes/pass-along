@@ -16,6 +16,7 @@ import {
   type JobHandlerInput
 } from "./runner.js";
 import { embedRecommendation } from "./embed-recommendation.js";
+import { deleteRecommendation } from "../lifecycle/delete-recommendation.js";
 import {
   extractStory,
   scoreQuality,
@@ -51,6 +52,7 @@ export const JOB_NAMES = [
   "verifyLicense",
   "embedRecommendation",
   "decidePublish",
+  "deleteSubmission",
   "freshnessBatch",
   "licenseRecheck",
   "aggregateRebuild",
@@ -219,6 +221,47 @@ const decidePublishJob = defineJob({
   }
 });
 
+export interface DeleteSubmissionResult {
+  readonly deleted: boolean;
+  readonly skippedReason?: "storage_unavailable" | "not_found" | "not_a_removal";
+}
+
+// PA-026: moderation.decided already carries a "remove" action in its
+// schema (packages/core/src/schema.ts) that nothing emitted before this —
+// reusing it here as the deletion trigger avoids widening EventCatalog.
+// Only runs the MHMDA-style cascade for that action; storage without the
+// lifecycle port (e.g. today's InMemoryJobStorage/PassDemoStore) reports
+// storage_unavailable rather than throwing, matching embedRecommendation's
+// duck-typed-storage convention.
+const deleteSubmissionJob = defineJob({
+  name: "deleteSubmission",
+  trigger: { kind: "event", event: "moderation.decided" },
+  async handler(input): Promise<DeleteSubmissionResult> {
+    const event = requireModerationDecidedEvent(input.event);
+
+    if (event.payload.action !== "remove") {
+      return { deleted: false, skippedReason: "not_a_removal" };
+    }
+
+    const recommendationId = event.payload.recommendation_id;
+    const identity = identityFor("deleteSubmission", recommendationId, input);
+
+    return runIdempotentStep(
+      input.storage,
+      input.step,
+      identity,
+      "deleteSubmission",
+      () =>
+        deleteRecommendation({
+          recommendationId,
+          storage: input.storage,
+          now: input.now
+        }),
+      input.now()
+    );
+  }
+});
+
 const onSubmissionReceivedJob = defineJob({
   name: "onSubmissionReceived",
   trigger: { kind: "event", event: "submission.received" },
@@ -300,6 +343,7 @@ export const JOB_DEFINITIONS = [
   verifyLicenseJob,
   embedRecommendationJob,
   decidePublishJob,
+  deleteSubmissionJob,
   freshnessBatchJob,
   licenseRecheckJob,
   aggregateRebuildJob,
@@ -337,6 +381,16 @@ function requireSubmissionEvent(
 ): Extract<EventCatalog, { type: "submission.received" }> {
   if (event?.type !== "submission.received") {
     throw new Error("Expected submission.received event");
+  }
+
+  return event;
+}
+
+function requireModerationDecidedEvent(
+  event: EventCatalog | null
+): Extract<EventCatalog, { type: "moderation.decided" }> {
+  if (event?.type !== "moderation.decided") {
+    throw new Error("Expected moderation.decided event");
   }
 
   return event;
