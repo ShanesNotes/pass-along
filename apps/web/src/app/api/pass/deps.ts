@@ -3,9 +3,9 @@ import {
   createInMemoryJobStorage,
   createInlineJobRunner,
   type EventsOutboxRow,
-  type InMemoryJobStorage,
   type IntakeArtifactStoragePort,
   type IntakeRecommendationSource,
+  type JobStoragePort,
   type ModerationEventRow
 } from "../../../../../../packages/engine/src/jobs/index";
 import {
@@ -14,6 +14,7 @@ import {
   type SafetyGateResult
 } from "../../../../../../packages/engine/src/safety/index";
 import { logger } from "../../../../../../packages/engine/src/http/index";
+import { createStores } from "../../../../../../packages/engine/src/db/stores";
 import {
   loadConfig,
   type AppConfig,
@@ -86,7 +87,9 @@ export type AdminReviewQueueItem = {
     readonly name: string;
     readonly credential: string;
     readonly kind: Provider["kind"];
-    readonly metro: Provider["metro"];
+    // A DB-backed provider's location isn't confined to the fixture demo's
+    // two metros (Provider["metro"]), so this is the wider, honest type.
+    readonly metro: string;
   };
   readonly submitted_at: string;
   readonly flag_reasons: readonly string[];
@@ -162,10 +165,13 @@ export type PassApiCrisisResponse = {
 };
 
 export interface PassDemoStore
-  extends InMemoryJobStorage,
+  extends JobStoragePort,
     IntakeArtifactStoragePort {
-  hasProvider(providerId: string): boolean;
-  createSubmission(input: PassRequestBody, now: Date): StoredRecommendation;
+  hasProvider(providerId: string): Promise<boolean>;
+  createSubmission(
+    input: PassRequestBody,
+    now: Date
+  ): Promise<StoredRecommendation>;
   listAdminReviewQueue(): Promise<readonly AdminReviewQueueItem[]>;
   decideAdminReview(input: {
     readonly recommendationId: string;
@@ -208,7 +214,7 @@ let defaultDeps: PassRouteDeps | undefined;
 export function createPassPostHandler(deps: PassRouteDeps) {
   return async (request: Request): Promise<Response> => {
     const config = deps.config ?? loadConfig(deps.env);
-    const parsed = parsePassRequestBody(await readJson(request), deps.store);
+    const parsed = await parsePassRequestBody(await readJson(request), deps.store);
 
     if (!parsed.ok) {
       return json({ error: "INVALID_PASS_REQUEST" }, 400);
@@ -230,7 +236,7 @@ export function createPassPostHandler(deps: PassRouteDeps) {
     warnIfSafetyGateDegraded(gate);
 
     const now = deps.now?.() ?? new Date();
-    const recommendation = deps.store.createSubmission(parsed.body, now);
+    const recommendation = await deps.store.createSubmission(parsed.body, now);
     const event: Extract<EventCatalog, { type: "submission.received" }> = {
       type: "submission.received",
       payload: {
@@ -249,7 +255,10 @@ export function createPassPostHandler(deps: PassRouteDeps) {
 export function defaultPassRouteDeps(): PassRouteDeps {
   if (!defaultDeps) {
     const config = loadConfig();
-    const store = createPassDemoStore(fixtureProviders);
+    // DB-backed PassStore when DATABASE_URL is set (expects migrations
+    // applied + real provider data, not the fixture roster); otherwise the
+    // in-memory demo store, unchanged from before.
+    const store = createStores(config)?.passStore ?? createPassDemoStore(fixtureProviders);
 
     defaultDeps = {
       store,
@@ -282,11 +291,11 @@ export function createPassDemoStore(
   const store: PassDemoStore = {
     ...base,
 
-    hasProvider(providerId) {
+    async hasProvider(providerId) {
       return providers.has(providerId);
     },
 
-    createSubmission(input, now) {
+    async createSubmission(input, now) {
       const provider = providerForInput(input, providers, () => `new_${nextProvider++}`);
       const recommendationId = `pass_rec_${nextRecommendation++}`;
       const submittedAt = now.toISOString();
@@ -772,10 +781,12 @@ function warnIfSafetyGateDegraded(gate: SafetyGateResult): void {
   });
 }
 
-function parsePassRequestBody(
+async function parsePassRequestBody(
   value: unknown,
   store: PassDemoStore
-): { readonly ok: true; readonly body: PassRequestBody } | { readonly ok: false } {
+): Promise<
+  { readonly ok: true; readonly body: PassRequestBody } | { readonly ok: false }
+> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { ok: false };
   }
@@ -798,7 +809,7 @@ function parsePassRequestBody(
   }
 
   if (hasProviderId) {
-    if (!store.hasProvider(providerId)) {
+    if (!(await store.hasProvider(providerId))) {
       return { ok: false };
     }
 
