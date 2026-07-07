@@ -39,3 +39,38 @@ jobs:
 
       - name: Privacy scan
         run: pnpm privacy:scan
+
+  # Proves the production build stays keyless: no secrets are referenced
+  # below, so this job only has whatever GOOGLE_API_KEY/ANTHROPIC_API_KEY/
+  # etc. GitHub Actions gives an unauthenticated job by default (none). Model
+  # calls fall back deterministically and the crisis path fails closed with a
+  # 503 at runtime without ANTHROPIC_API_KEY (see docs/DEPLOY.md) — neither
+  # of those is a build-time failure, so `next build` succeeding here is the
+  # actual proof, not a smell.
+  deploy-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/build/foundation')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build web app (no secrets)
+        run: pnpm --filter web build
+
+      - name: Upload .next build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-next-build
+          path: apps/web/.next
+          retention-days: 7
