@@ -99,6 +99,17 @@ waves:
       - {id: PA-020, packet: L4-S2, title: Grounded aggregation pages, status: shipped, route: sonnet-agent}
       - {id: PA-021, packet: landing (not in spec), title: Product-is-the-landing restructure, status: shipped, route: sonnet-agent}
 
+  foundation-backend-wave:
+    note: "2026-07-06 overnight/07-07 Fable waves (post prior housekeeping gate). Backend foundation against pgvector container + Supabase shape. 7 commits to 9614b51. See Daily 2026-07-07. 319 tests + live RLS verified."
+    tickets:
+      - {id: PA-022, packet: L0-S4 (foundation), title: typed config foundation — secret-redacting config loader, env validation, contract bindings, status: shipped, route: codex}
+      - {id: PA-024, packet: L1-S2 (api), title: API hardening — rate-limiter + request IDs + allowlist logger + graceful-shutdown, status: shipped, route: codex}
+      - {id: PA-023, packet: L1-S1 (db), title: Postgres/pgvector adapters behind every port + container harness + migrations/RLS validation (319 tests), status: shipped, route: codex}
+      - {id: PA-028, packet: L2-S2, title: async PassStore contract + full DB-backed pass store + pipeline-parity tests, status: shipped, route: codex}
+      - {id: PA-025, packet: L3-S2, title: admin auth port — HS256 verifier (node:crypto) + app_metadata.role admin, status: shipped, route: codex}
+      - {id: PA-026, packet: L3-S3, title: MHMDA deletion cascade + /api/data-rights (statutory-clock), status: shipped, route: sonnet}
+      - {id: PA-027, packet: L3-S4, title: /api/health + deploy runbook (docs/DEPLOY.md + Supabase go-live checklist), status: shipped, route: codex}
+
   wave-4-plus:
     note: "Remaining spec packets (L1-S5 full, L3-S1 historical-crisis nuance, L3-S4 freshness, L3-S5, L4-S1/S3/S4, L5 MCP) enqueue after the meeting resolves discovery unknowns."
     tickets: []
